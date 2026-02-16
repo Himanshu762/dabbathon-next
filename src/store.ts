@@ -23,6 +23,12 @@ function normalizeRoomTitle(room: string | undefined): string | undefined {
     return trimmed;
 }
 
+// Strip undefined values — Firestore rejects them
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function stripUndefined(obj: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
+}
+
 function makeDefaultState(): AppState {
     const defaultMetrics: Metric[] = [];
 
@@ -481,18 +487,25 @@ export const ops = {
     renameTeam(id: string, name: string) {
         setState((s) => { if (s.teams[id]) s.teams[id].name = name; });
         const t = getState().teams[id];
-        if (t) setDoc(doc(db, 'teams', id), { ...t }, { merge: true }).catch(console.error);
+        if (t) setDoc(doc(db, 'teams', id), stripUndefined({ ...t }), { merge: true }).catch(console.error);
     },
 
-    addTeam(name: string, opts?: { slotTime?: string; room?: string; problemStatement?: string }): string {
+    addTeam(name: string, opts?: { slotTime?: string; room?: string; problemStatement?: string; username?: string; password?: string }): string {
         const s = getState();
         const nums = Object.keys(s.teams).map(k => parseInt(k.replace(/\D/g, ''), 10)).filter(n => !Number.isNaN(n));
         let nextNum = (nums.length ? Math.max(...nums) : 1) + 1;
         if (nextNum < 2) nextNum = 2;
         const id = `T${nextNum}`;
-        const team: Team = { id, name: name.trim() || id, slotTime: opts?.slotTime, room: normalizeRoomTitle(opts?.room), problemStatement: opts?.problemStatement };
+        const team: Team = {
+            id, name: name.trim() || id,
+            slotTime: opts?.slotTime || '',
+            room: normalizeRoomTitle(opts?.room) || '',
+            problemStatement: opts?.problemStatement || '',
+            username: opts?.username || '',
+            password: opts?.password || '',
+        };
         setState((s) => { s.teams[id] = team; });
-        setDoc(doc(db, 'teams', id), team).catch(console.error);
+        setDoc(doc(db, 'teams', id), stripUndefined(team)).catch(console.error);
         return id;
     },
 
@@ -506,35 +519,35 @@ export const ops = {
             if (s.teams[id]) s.teams[id].slotTime = slotTime;
         });
         const t = getState().teams[id];
-        if (t) setDoc(doc(db, 'teams', id), { ...t }, { merge: true }).catch(console.error);
+        if (t) setDoc(doc(db, 'teams', id), stripUndefined({ ...t }), { merge: true }).catch(console.error);
     },
 
     setTeamRoom(id: string, room: string) {
         setState((s) => {
-            if (s.teams[id]) s.teams[id].room = normalizeRoomTitle(room) || undefined;
+            if (s.teams[id]) s.teams[id].room = normalizeRoomTitle(room) || '';
         });
         const t = getState().teams[id];
-        if (t) setDoc(doc(db, 'teams', id), { ...t }, { merge: true }).catch(console.error);
+        if (t) setDoc(doc(db, 'teams', id), stripUndefined({ ...t }), { merge: true }).catch(console.error);
     },
 
     setTeamProblem(id: string, problemStatement: string) {
         setState((s) => { if (s.teams[id]) s.teams[id].problemStatement = problemStatement; });
         const t = getState().teams[id];
-        if (t) setDoc(doc(db, 'teams', id), { ...t }, { merge: true }).catch(console.error);
+        if (t) setDoc(doc(db, 'teams', id), stripUndefined({ ...t }), { merge: true }).catch(console.error);
     },
 
     setTeamFinalist(id: string, finalist: boolean) {
         setState((s) => { if (s.teams[id]) s.teams[id].finalist = finalist; });
         const t = getState().teams[id];
-        if (t) setDoc(doc(db, 'teams', id), { ...t }, { merge: true }).catch(console.error);
+        if (t) setDoc(doc(db, 'teams', id), stripUndefined({ ...t }), { merge: true }).catch(console.error);
     },
 
     setTeamCredential(teamId: string, username: string, password: string) {
         setState((s) => {
-            if (s.teams[teamId]) { s.teams[teamId].username = username; if (password) s.teams[teamId].password = password; }
+            if (s.teams[teamId]) { s.teams[teamId].username = username; s.teams[teamId].password = password; }
         });
         const t = getState().teams[teamId];
-        if (t) setDoc(doc(db, 'teams', teamId), { ...t }, { merge: true }).catch(console.error);
+        if (t) setDoc(doc(db, 'teams', teamId), stripUndefined({ ...t }), { merge: true }).catch(console.error);
     },
 
     updateRoom(id: string, patch: { title?: string; password?: string; invigilator?: string }) {
@@ -545,7 +558,7 @@ export const ops = {
             if (patch.title) rooms[id].title = normalizeRoomTitle(patch.title);
         });
         const r = getState().rooms?.[id];
-        if (r) setDoc(doc(db, 'rooms', id), { ...r, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.error);
+        if (r) setDoc(doc(db, 'rooms', id), stripUndefined({ ...r, updatedAt: new Date().toISOString() }), { merge: true }).catch(console.error);
     },
 
     addRoom(id: string, title: string, password: string) {
