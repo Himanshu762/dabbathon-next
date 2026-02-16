@@ -89,12 +89,16 @@ export default function InvigilatorPage() {
                             return (
                                 <button key={t.id} onClick={() => setSelectedTeamId(t.id)}
                                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${isSelected ? 'bg-d-red text-white shadow-sm' :
-                                            teamScored ? 'bg-green-50 text-d-black border border-green-200' :
-                                                'bg-white border border-d-gray-200 text-d-black hover:border-d-gray-300'
+                                        teamScored ? 'bg-green-50 text-d-black border border-green-200' :
+                                            'bg-white border border-d-gray-200 text-d-black hover:border-d-gray-300'
                                         }`}>
                                     <div className="font-medium">{t.name}</div>
                                     <div className="text-[11px] opacity-70">{t.id} · {t.slotTime || 'No slot'}</div>
-                                    {teamScored && !isSelected && <div className="text-[10px] text-green-600 mt-0.5">✓ Scored</div>}
+                                    <div className="text-[11px] opacity-70">{t.id} · {t.slotTime || 'No slot'}</div>
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                        {teamScored && !isSelected && <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">✓ Scored</span>}
+                                        {t.submissions?.[activeRound] && <span className="text-[10px] text-blue-600 bg-blue-50 px-1 rounded flex items-center gap-0.5">🔗 Link</span>}
+                                    </div>
                                 </button>
                             );
                         })}
@@ -130,7 +134,7 @@ export default function InvigilatorPage() {
 function ScoringPanel({
     team, metrics, scores, round, invigilatorName, roomId, timerConfig, timerState,
 }: {
-    team: { id: string; name: string; slotTime?: string; problemStatement?: string };
+    team: { id: string; name: string; slotTime?: string; problemStatement?: string; submissions?: Record<string, string> };
     metrics: { id: string; name: string; max: number }[];
     scores: { teamId: string; metricId: string; score: number; notes?: string }[];
     round: 1 | 2 | 3;
@@ -170,6 +174,20 @@ function ScoringPanel({
                 <div>
                     <div className="font-heading text-lg font-bold text-d-black">{team.name}</div>
                     <div className="text-[11px] text-d-gray-400">{team.id} · Slot: {team.slotTime || 'N/A'}</div>
+                    <div className="text-[11px] text-d-gray-400">{team.id} · Slot: {team.slotTime || 'N/A'}</div>
+                    {team.submissions?.[round] && (
+                        <div className="mt-2">
+                            <a
+                                href={team.submissions[round]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-secondary text-xs inline-flex items-center gap-1 py-1 px-2 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                            >
+                                <span>🔗 View Round {round} Submission</span>
+                                <span className="text-[10px]">↗</span>
+                            </a>
+                        </div>
+                    )}
                 </div>
                 <div className="text-right">
                     <div className="text-[10px] text-d-gray-400 uppercase">Total</div>

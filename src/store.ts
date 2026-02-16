@@ -88,20 +88,10 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 }
 
 // ─── Metric helpers ───
-function baseMetrics(all: Metric[]): Metric[] {
-    return all.filter(m => !m.id.startsWith('r2_') && !m.id.startsWith('r3_'));
-}
-function metricsRound2(all: Metric[]): Metric[] {
-    return all.filter(m => m.id.startsWith('r2_'));
-}
-function metricsRound3(all: Metric[]): Metric[] {
-    return all.filter(m => m.id.startsWith('r3_'));
-}
 export function metricsForRound(round: 1 | 2 | 3, all: Metric[]): Metric[] {
-    if (round === 2) return metricsRound2(all).length ? metricsRound2(all) : baseMetrics(all);
-    if (round === 3) return metricsRound3(all).length ? metricsRound3(all) : baseMetrics(all);
-    return baseMetrics(all);
+    return all.filter(m => (m.round || 1) === round);
 }
+
 
 // ─── Firebase Realtime Listeners ───
 let listenersInitialized = false;
@@ -464,14 +454,15 @@ export const ops = {
         if (m) setDoc(doc(db, 'metrics', m.id), { name: m.name, max: m.max }, { merge: true }).catch(console.error);
     },
 
-    addMetric(name: string, max = 10) {
+    addMetric(name: string, max = 10, round: 1 | 2 | 3 = 1) {
         const nm = (name || '').trim();
         if (!nm) return;
         const nums = getState().metrics.map(m => parseInt(m.id.replace(/\D/g, ''), 10)).filter(n => !Number.isNaN(n));
         const next = (nums.length ? Math.max(...nums) : 0) + 1;
         const id = `m${next}`;
-        setState((s) => { s.metrics.push({ id, name: nm, max: Math.max(1, Math.floor(max)) }); });
-        setDoc(doc(db, 'metrics', id), { name: nm, max: Math.max(1, Math.floor(max)) }).catch(console.error);
+        const metric: Metric = { id, name: nm, max: Math.max(1, Math.floor(max)), round };
+        setState((s) => { s.metrics.push(metric); });
+        setDoc(doc(db, 'metrics', id), metric).catch(console.error);
     },
 
     removeMetric(id: string) {
@@ -493,8 +484,7 @@ export const ops = {
     addTeam(name: string, opts?: { slotTime?: string; room?: string; problemStatement?: string; username?: string; password?: string }): string {
         const s = getState();
         const nums = Object.keys(s.teams).map(k => parseInt(k.replace(/\D/g, ''), 10)).filter(n => !Number.isNaN(n));
-        let nextNum = (nums.length ? Math.max(...nums) : 1) + 1;
-        if (nextNum < 2) nextNum = 2;
+        let nextNum = (nums.length ? Math.max(...nums) : 0) + 1;
         const id = `T${nextNum}`;
         const team: Team = {
             id, name: name.trim() || id,
@@ -573,6 +563,44 @@ export const ops = {
     removeRoom(id: string) {
         setState(s => { if (s.rooms) delete s.rooms[id]; });
         deleteDoc(doc(db, 'rooms', id)).catch(console.error);
+    },
+
+    submitFile(round: string, teamId: string, url: string) {
+        setState((s) => {
+            if (s.teams[teamId]) {
+                const team = s.teams[teamId];
+                team.submissions = { ...(team.submissions || {}), [round]: url };
+            }
+        });
+        const t = getState().teams[teamId];
+        if (t) setDoc(doc(db, 'teams', teamId), stripUndefined({ ...t }), { merge: true }).catch(console.error);
+    },
+
+    autoSelectFinalists() {
+        const s = getState();
+        const teams = Object.values(s.teams);
+        const scoresR1 = s.scores || [];
+        const scoresR2 = s.scoresRound2 || [];
+
+        // Calculate total scores (R1 + R2)
+        const teamScores: Record<string, number> = {};
+        scoresR1.forEach(sc => teamScores[sc.teamId] = (teamScores[sc.teamId] || 0) + sc.score);
+        scoresR2.forEach(sc => teamScores[sc.teamId] = (teamScores[sc.teamId] || 0) + sc.score);
+
+        // Sort descending
+        const sorted = teams.sort((a, b) => (teamScores[b.id] || 0) - (teamScores[a.id] || 0));
+
+        // Pick Top 10
+        const top10 = sorted.slice(0, 10);
+        const top10Ids = new Set(top10.map(t => t.id));
+
+        // Update finalists
+        teams.forEach(t => {
+            const isFinalist = top10Ids.has(t.id);
+            if (t.finalist !== isFinalist) {
+                ops.setTeamFinalist(t.id, isFinalist);
+            }
+        });
     },
 
     async submitScore(round: 1 | 2 | 3, entry: ScoreEntry) {
@@ -672,21 +700,29 @@ export const ops = {
 };
 
 // Helper: get queued auto pings
-export function getQueuedAutoPings(): { teamId: string; slotTime: string; minutesUntil: number }[] {
+// Helper: get queued auto pings (5m and 2m)
+export function getQueuedAutoPings(): { teamId: string; slotTime: string; minutesUntil: number; message: string }[] {
     const s = getState();
     if (s.autoPingEnabled === false) return [];
-    const result: { teamId: string; slotTime: string; minutesUntil: number }[] = [];
+    const result: { teamId: string; slotTime: string; minutesUntil: number; message: string }[] = [];
     const now = new Date();
-    const lead = s.autoPingLeadMinutes ?? 5;
+
     for (const t of Object.values(s.teams)) {
         const start = parseSlotStart(t.slotTime);
         if (!start) continue;
-        const label = t.slotTime || '';
-        if (hasBeenNotified(t.id, label)) continue;
         const diffMs = start.getTime() - now.getTime();
-        if (diffMs > 0 && diffMs <= lead * 60 * 1000 * 3) {
-            result.push({ teamId: t.id, slotTime: label, minutesUntil: Math.round(diffMs / 60_000) });
-        }
+        const minutes = Math.ceil(diffMs / 60_000);
+
+        let msg = '';
+        if (minutes === 5) msg = `Your slot starts in 5 minutes (${t.slotTime})`;
+        else if (minutes === 2) msg = `Your slot starts in 2 minutes (${t.slotTime})`;
+        else continue;
+
+        // Dedup against notifications
+        const alreadySent = s.notifications?.some(n => n.teamId === t.id && n.message === msg); // Exact match
+        if (!alreadySent) result.push({ teamId: t.id, slotTime: t.slotTime || '', minutesUntil: minutes, message: msg });
     }
     return result;
 }
+
+

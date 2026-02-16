@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isTeamAuthed, logoutTeam, useStore, ops, metricsForRound } from '../../../store';
@@ -100,8 +100,8 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
             {/* Radar Chart */}
             <div className="card p-5">
                 <div className="card-section-title mb-3">Score Radar</div>
-                <div className="h-72 bg-white rounded-lg border border-d-gray-100 p-2">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={280}>
+                <div className="h-72 bg-white rounded-lg border border-d-gray-100 p-2 w-full min-h-[290px]">
+                    <ResponsiveContainer width="100%" height="100%">
                         <RadarChart data={radarData} outerRadius="65%" margin={{ top: 20, right: 60, bottom: 20, left: 60 }}>
                             <PolarGrid stroke="rgba(0,0,0,0.06)" />
                             <PolarAngleAxis dataKey="metric" tick={{ fill: '#424242', fontSize: 11 }} />
@@ -140,6 +140,80 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
                             </div>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {/* Submission Upload */}
+            <div className="card p-5">
+                <div className="card-section-title mb-3">Round {activeRound} Submission</div>
+                <div className="text-xs text-d-gray-500 mb-3">
+                    Please upload your files to Google Drive, Dropbox, or similar, and paste the <strong>shareable link</strong> here.
+                    Ensure the link is accessible to "Anyone with the link".
+                </div>
+                <SubmissionLink teamId={teamId} round={activeRound as 1 | 2 | 3} existingUrl={team.submissions?.[activeRound]} />
+            </div>
+        </div>
+    );
+}
+
+function SubmissionLink({ teamId, round, existingUrl }: { teamId: string; round: 1 | 2 | 3; existingUrl?: string }) {
+    const [link, setLink] = useState('');
+
+    const handleSubmit = () => {
+        if (!link.trim()) return;
+        try {
+            // Basic URL validation
+            new URL(link);
+            ops.submitFile(String(round), teamId, link.trim());
+            setLink('');
+            alert('Link submitted successfully!');
+        } catch (e) {
+            alert('Please enter a valid URL (e.g., https://...)');
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+            {existingUrl ? (
+                <div className="bg-d-gray-50 p-3 rounded-lg border border-d-gray-200">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-xl">📄</div>
+                            <div className="truncate min-w-0 flex-1">
+                                <div className="text-[10px] text-d-gray-500 uppercase tracking-wider font-semibold">Submitted Link</div>
+                                <a href={existingUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-d-black hover:underline font-medium truncate block shadow-none" title={existingUrl}>
+                                    {existingUrl}
+                                </a>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                if (confirm('Remove this submission?')) {
+                                    ops.submitFile(String(round), teamId, '');
+                                }
+                            }}
+                            className="text-xs text-d-red hover:bg-d-red/10 px-3 py-1.5 rounded transition font-medium flex-shrink-0 whitespace-nowrap"
+                        >
+                            Remove
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="flex gap-2 items-center">
+                    <input
+                        className="input py-1.5 px-3 text-sm w-full"
+                        placeholder="https://drive.google.com/..."
+                        value={link}
+                        onChange={e => setLink(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                    />
+                    <button
+                        disabled={!link.trim()}
+                        onClick={handleSubmit}
+                        className="btn-primary py-1.5 px-3 text-xs disabled:opacity-50 whitespace-nowrap"
+                    >
+                        Submit Link
+                    </button>
                 </div>
             )}
         </div>

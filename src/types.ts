@@ -6,6 +6,7 @@ export interface Metric {
   id: string;
   name: string;
   max: number;
+  round?: 1 | 2 | 3;
 }
 
 export interface Team {
@@ -17,6 +18,7 @@ export interface Team {
   finalist?: boolean;
   username?: string;
   password?: string;
+  submissions?: Record<string, string>; // e.g. "1": "url", "2": "url"
 }
 
 export interface ScoreEntry {

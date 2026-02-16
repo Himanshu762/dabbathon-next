@@ -113,15 +113,25 @@ export default function AdminTeamsPage() {
         Object.keys(teams).forEach(id => ops.removeTeam(id));
     };
 
+    const handleAutoSelect = () => {
+        if (!confirm('Auto-select Top 10 teams based on R1+R2 scores? This will update finalist status.')) return;
+        ops.autoSelectFinalists();
+    };
+
     return (
         <div className="card overflow-hidden">
             <div className="p-4 border-b border-d-gray-200 flex items-center justify-between bg-white">
                 <div className="card-section-title">Teams ({list.length})</div>
-                {list.length > 0 && (
-                    <button className="text-[11px] text-d-gray-400 hover:text-d-red transition font-medium" onClick={handleDeleteAllTeams}>
-                        Delete All
+                <div className="flex gap-2 items-center">
+                    <button className="text-[11px] text-d-gray-400 hover:text-d-red transition font-medium" onClick={handleAutoSelect}>
+                        Auto Select Finalists
                     </button>
-                )}
+                    {list.length > 0 && (
+                        <button className="text-[11px] text-d-gray-400 hover:text-d-red transition font-medium" onClick={handleDeleteAllTeams}>
+                            Delete All
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="overflow-x-auto">

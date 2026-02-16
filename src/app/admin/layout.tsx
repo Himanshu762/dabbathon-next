@@ -1,10 +1,22 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
+import { getQueuedAutoPings, ops } from '../../store';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const tab = pathname === '/admin/rooms' ? 'rooms' : pathname === '/admin/teams' ? 'teams' : 'overview';
+
+    // Auto-Ping Runner
+    // We run this in Layout so it works on any admin page
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const pings = getQueuedAutoPings();
+            pings.forEach(p => ops.notifyTeam(p.teamId, p.message));
+        }, 30_000); // Check every 30s
+        return () => clearInterval(interval);
+    }, []);
 
     return (
         <div className="space-y-5">

@@ -5,8 +5,8 @@ import { useStore, ops, getQueuedAutoPings } from '../../store';
 import { TrashIcon } from '@heroicons/react/24/outline';
 
 /* ── Editable Metric Row (name + score) ── */
-function MetricRow({ id, name, max, onRemove }: {
-    id: string; name: string; max: number;
+function MetricRow({ id, name, max, round, onRemove }: {
+    id: string; name: string; max: number; round?: 1 | 2 | 3;
     onRemove: (id: string) => void;
 }) {
     const [localName, setLocalName] = useState(name);
@@ -23,6 +23,9 @@ function MetricRow({ id, name, max, onRemove }: {
                     onChange={e => setLocalName(e.target.value)}
                     onBlur={() => ops.updateMetric(id, { name: localName })}
                 />
+            </td>
+            <td className="w-16 text-center text-xs font-semibold text-d-gray-500">
+                R{round || 1}
             </td>
             <td className="w-24">
                 <input
@@ -58,12 +61,14 @@ export default function AdminOverviewPage() {
     const queued = useMemo(() => getQueuedAutoPings(), []);
     const [newName, setNewName] = useState('');
     const [newMax, setNewMax] = useState(10);
+    const [newRound, setNewRound] = useState<1 | 2 | 3>(1);
 
     const handleAddMetric = () => {
         if (!newName.trim()) return;
-        ops.addMetric(newName.trim(), newMax);
+        ops.addMetric(newName.trim(), newMax, newRound);
         setNewName('');
         setNewMax(10);
+        setNewRound(1);
     };
 
     const handleRemoveMetric = useCallback((id: string) => ops.removeMetric(id), []);
@@ -136,6 +141,7 @@ export default function AdminOverviewPage() {
                             <tr>
                                 <th className="w-16">ID</th>
                                 <th>Metric Name</th>
+                                <th className="w-16 text-center">Round</th>
                                 <th className="w-24 text-center">Score</th>
                                 <th className="w-10 text-center">Del</th>
                             </tr>
@@ -149,7 +155,7 @@ export default function AdminOverviewPage() {
                                 </tr>
                             )}
                             {metrics.map(m => (
-                                <MetricRow key={m.id} id={m.id} name={m.name || ''} max={m.max} onRemove={handleRemoveMetric} />
+                                <MetricRow key={m.id} id={m.id} name={m.name || ''} max={m.max} round={m.round} onRemove={handleRemoveMetric} />
                             ))}
                             {/* Add Row */}
                             <tr className="bg-d-gray-50/50">
@@ -162,6 +168,14 @@ export default function AdminOverviewPage() {
                                         onChange={e => setNewName(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleAddMetric()}
                                     />
+                                </td>
+                                <td className="px-2 py-2">
+                                    <select className="input py-1.5 px-2 text-xs w-full text-center"
+                                        value={newRound} onChange={e => setNewRound(Number(e.target.value) as 1 | 2 | 3)}>
+                                        <option value={1}>R1</option>
+                                        <option value={2}>R2</option>
+                                        <option value={3}>R3</option>
+                                    </select>
                                 </td>
                                 <td className="px-3 py-2">
                                     <input
