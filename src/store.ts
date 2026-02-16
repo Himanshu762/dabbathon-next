@@ -451,7 +451,7 @@ export const ops = {
     updateMetric(id: string, patch: Partial<Metric>) {
         setState((s) => { const m = s.metrics.find(mm => mm.id === id); if (m) Object.assign(m, patch); });
         const m = getState().metrics.find(m => m.id === id);
-        if (m) setDoc(doc(db, 'metrics', m.id), { name: m.name, max: m.max }, { merge: true }).catch(console.error);
+        if (m) setDoc(doc(db, 'metrics', m.id), { name: m.name, max: m.max, round: m.round || 1 }, { merge: true }).catch(console.error);
     },
 
     addMetric(name: string, max = 10, round: 1 | 2 | 3 = 1) {

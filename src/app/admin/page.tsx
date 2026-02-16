@@ -24,8 +24,16 @@ function MetricRow({ id, name, max, round, onRemove }: {
                     onBlur={() => ops.updateMetric(id, { name: localName })}
                 />
             </td>
-            <td className="w-16 text-center text-xs font-semibold text-d-gray-500">
-                R{round || 1}
+            <td className="w-16 text-center">
+                <select
+                    className="input py-0.5 px-1 text-xs w-full text-center bg-transparent border-none hover:bg-d-gray-100 cursor-pointer"
+                    value={round || 1}
+                    onChange={(e) => ops.updateMetric(id, { round: Number(e.target.value) as 1 | 2 | 3 })}
+                >
+                    <option value={1}>R1</option>
+                    <option value={2}>R2</option>
+                    <option value={3}>R3</option>
+                </select>
             </td>
             <td className="w-24">
                 <input
