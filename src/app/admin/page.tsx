@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useStore, ops, getQueuedAutoPings } from '../../store';
 import { TrashIcon } from '@heroicons/react/24/outline';
 
@@ -70,13 +70,14 @@ export default function AdminOverviewPage() {
     const [newName, setNewName] = useState('');
     const [newMax, setNewMax] = useState(10);
     const [newRound, setNewRound] = useState<1 | 2 | 3>(1);
+    useEffect(() => setNewRound(activeRound as 1 | 2 | 3), [activeRound]);
 
     const handleAddMetric = () => {
         if (!newName.trim()) return;
         ops.addMetric(newName.trim(), newMax, newRound);
         setNewName('');
         setNewMax(10);
-        setNewRound(1);
+        // Do not reset round, keep user selection
     };
 
     const handleRemoveMetric = useCallback((id: string) => ops.removeMetric(id), []);

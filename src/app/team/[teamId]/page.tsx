@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useMemo, useState } from 'react';
+import { use, useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isTeamAuthed, logoutTeam, useStore, ops, metricsForRound } from '../../../store';
@@ -42,8 +42,15 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
         metric: bm.m.name, score: bm.score, max: bm.m.max
     })), [byMetric]);
 
+    useEffect(() => {
+        if (!team || !teamId) {
+            const timeout = setTimeout(() => router.push('/'), 2000);
+            return () => clearTimeout(timeout);
+        }
+    }, [team, teamId, router]);
+
     if (!team || !teamId) {
-        return <div className="card p-8 text-center"><p className="text-sm text-d-gray-400">Team not found.</p><Link className="text-xs text-d-red hover:underline mt-2 inline-block" href="/participant">Back</Link></div>;
+        return <div className="card p-8 text-center"><p className="text-sm text-d-gray-400">Team not found or loading...</p><p className="text-xs text-d-gray-300 mt-2">Redirecting to login...</p></div>;
     }
 
     if (!authed) {
