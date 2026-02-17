@@ -2,9 +2,22 @@
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useStore, ops, getQueuedAutoPings } from '../../store';
-import { TrashIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, ArrowDownTrayIcon, SignalIcon } from '@heroicons/react/24/outline';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 
-/* ── Editable Metric Row (name + score) ── */
+/* ── Editable Metric Row ── */
 function MetricRow({ id, name, max, round, onRemove }: {
     id: string; name: string; max: number; round?: 1 | 2 | 3;
     onRemove: (id: string) => void;
@@ -13,20 +26,20 @@ function MetricRow({ id, name, max, round, onRemove }: {
     const [localMax, setLocalMax] = useState(max);
 
     return (
-        <tr className="hover:bg-d-gray-50/50 transition">
-            <td className="w-16 text-xs text-d-gray-400 font-mono">{id}</td>
-            <td>
-                <input
-                    className="input py-1 px-2 text-sm w-full bg-transparent"
+        <TableRow>
+            <TableCell className="font-mono text-xs text-d-gray-400">{id}</TableCell>
+            <TableCell>
+                <Input
+                    className="h-8 border-transparent bg-transparent focus-visible:ring-1 focus-visible:ring-d-gray-200 hover:bg-d-gray-50 transition-colors"
                     value={localName}
                     placeholder="Metric name"
                     onChange={e => setLocalName(e.target.value)}
                     onBlur={() => ops.updateMetric(id, { name: localName })}
                 />
-            </td>
-            <td className="w-16 text-center">
+            </TableCell>
+            <TableCell className="text-center">
                 <select
-                    className="input py-0.5 px-1 text-xs w-full text-center bg-transparent border-none hover:bg-d-gray-100 cursor-pointer"
+                    className="h-8 w-full rounded-md border-transparent bg-transparent text-xs focus:ring-1 focus:ring-d-gray-200 hover:bg-d-gray-50 cursor-pointer text-center"
                     value={round || 1}
                     onChange={(e) => ops.updateMetric(id, { round: Number(e.target.value) as 1 | 2 | 3 })}
                 >
@@ -34,28 +47,42 @@ function MetricRow({ id, name, max, round, onRemove }: {
                     <option value={2}>R2</option>
                     <option value={3}>R3</option>
                 </select>
-            </td>
-            <td className="w-24">
-                <input
+            </TableCell>
+            <TableCell className="w-24">
+                <Input
                     type="number"
-                    className="input py-1 px-2 text-center text-sm w-full bg-transparent"
+                    className="h-8 text-center border-transparent bg-transparent focus-visible:ring-1 focus-visible:ring-d-gray-200 hover:bg-d-gray-50"
                     min={1}
                     value={localMax}
-                    placeholder="Score"
                     onChange={e => setLocalMax(Number(e.target.value))}
                     onBlur={() => ops.updateMetric(id, { max: localMax })}
                 />
-            </td>
-            <td className="w-10 text-center">
-                <button
-                    className="text-d-gray-400 hover:text-d-red hover:bg-d-red/5 p-1.5 rounded transition inline-flex"
+            </TableCell>
+            <TableCell className="text-center">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-d-gray-400 hover:text-destructive hover:bg-destructive/10"
                     onClick={() => { if (confirm('Delete this metric?')) onRemove(id); }}
-                    title="Delete Metric"
                 >
                     <TrashIcon className="w-4 h-4" />
-                </button>
-            </td>
-        </tr>
+                </Button>
+            </TableCell>
+        </TableRow>
+    );
+}
+
+function StatCard({ label, value, subtext, highlight }: { label: string, value: string | number, subtext?: string, highlight?: boolean }) {
+    return (
+        <Card className={cn("overflow-hidden border-l-4", highlight ? "border-l-d-red" : "border-l-d-gray-300")}>
+            <CardContent className="p-5">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-d-gray-500 mb-1">{label}</div>
+                <div className={cn("text-2xl font-heading font-bold", highlight ? "text-d-red" : "text-d-black")}>
+                    {value}
+                </div>
+                {subtext && <div className="text-xs text-d-gray-400 mt-1">{subtext}</div>}
+            </CardContent>
+        </Card>
     );
 }
 
@@ -67,6 +94,8 @@ export default function AdminOverviewPage() {
     const metrics = useStore(s => s.metrics);
     const teams = useStore(s => s.teams);
     const queued = useMemo(() => getQueuedAutoPings(), []);
+
+    // New Metric State
     const [newName, setNewName] = useState('');
     const [newMax, setNewMax] = useState(10);
     const [newRound, setNewRound] = useState<1 | 2 | 3>(1);
@@ -77,142 +106,227 @@ export default function AdminOverviewPage() {
         ops.addMetric(newName.trim(), newMax, newRound);
         setNewName('');
         setNewMax(10);
-        // Do not reset round, keep user selection
     };
 
     const handleRemoveMetric = useCallback((id: string) => ops.removeMetric(id), []);
 
-    const handleDeleteAllMetrics = () => {
-        if (!confirm('Delete ALL metrics? This cannot be undone.')) return;
-        metrics.forEach(m => ops.removeMetric(m.id));
-    };
-
     return (
-        <div className="space-y-6">
-            {/* Config row */}
-            <div className="grid sm:grid-cols-3 gap-4">
-                <div className="card p-4">
-                    <div className="card-section-title mb-2">Round</div>
-                    <div className="flex gap-1">
-                        {([1, 2, 3] as const).map(r => (
-                            <button key={r} onClick={() => ops.setActiveRound(r)}
-                                className={`flex-1 py-1.5 rounded text-xs font-semibold transition ${activeRound === r ? 'bg-d-red text-white' : 'bg-d-gray-50 text-d-gray-600 hover:bg-d-gray-100'}`}>
-                                R{r}
-                            </button>
-                        ))}
+        <div className="min-h-screen bg-d-gray-50/50 p-6 space-y-8 max-w-[1600px] mx-auto">
+            {/* 1. Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <div className="flex items-center gap-3">
+                        <h1 className="dabbawala-stamp text-2xl border-2 border-d-red text-d-red px-3 py-1 bg-white shadow-[3px_3px_0px_0px_rgba(211,47,47,0.2)] rotate-[-1deg]">
+                            ADMIN CONTROL
+                        </h1>
+                        <Badge variant="outline" className="h-6 bg-white">v2.0</Badge>
                     </div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-d-gray-400 mt-2 ml-1">
+                        Logistics & Operations Center
+                    </p>
                 </div>
-                <div className="card p-4">
-                    <div className="card-section-title mb-2">Public Scores</div>
-                    <button onClick={() => ops.setPublicView(!publicView)}
-                        className={`w-full py-1.5 rounded text-xs font-semibold transition ${publicView ? 'bg-d-red text-white' : 'bg-d-gray-50 text-d-gray-600'}`}>
-                        {publicView ? 'ON' : 'OFF'}
-                    </button>
-                </div>
-                <div className="card p-4">
-                    <div className="card-section-title mb-2">Auto-Ping</div>
-                    <div className="flex gap-2 items-center">
-                        <button onClick={() => ops.setAutoPingEnabled(!autoPing)}
-                            className={`py-1.5 px-3 rounded text-xs font-semibold transition ${autoPing ? 'bg-d-red text-white' : 'bg-d-gray-50 text-d-gray-600'}`}>
-                            {autoPing ? 'ON' : 'OFF'}
-                        </button>
-                        <input type="number" className="input py-1 px-2 w-14 text-center text-xs" min={1} max={60}
-                            value={autoPingLead} onChange={e => ops.setAutoPingLeadMinutes(Number(e.target.value))} />
-                        <span className="text-[11px] text-d-gray-400">min lead</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Export */}
-            <div className="card p-4">
-                <div className="card-section-title mb-2">Export</div>
                 <div className="flex gap-2">
-                    {([1, 2, 3] as const).map(r => (
-                        <button key={r} onClick={() => ops.exportScoresCsv(r)} className="btn-secondary text-xs py-1.5 px-3">CSV Round {r}</button>
-                    ))}
+                    <Button variant="outline" size="sm" onClick={() => window.open('/', '_blank')}>
+                        View User Dashboard
+                    </Button>
                 </div>
             </div>
 
-            {/* Metrics Table */}
-            <div className="card overflow-hidden">
-                <div className="p-4 border-b border-d-gray-200 flex items-center justify-between bg-white">
-                    <div className="card-section-title">Metrics ({metrics.length})</div>
-                    {metrics.length > 0 && (
-                        <button className="text-[11px] text-d-gray-400 hover:text-d-red transition font-medium" onClick={handleDeleteAllMetrics}>
-                            Delete All
-                        </button>
-                    )}
-                </div>
+            {/* 2. Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <StatCard label="Active Round" value={`Round ${activeRound}`} highlight />
+                <StatCard label="Registered Teams" value={Object.keys(teams).length} subtext="Total teams" />
+                <StatCard label="Metrics Configured" value={metrics.length} subtext="Across all rounds" />
+                <StatCard label="Queued Pings" value={queued.length} subtext="Auto-notifications" />
+            </div>
 
-                <div className="overflow-x-auto">
-                    <table className="data-table">
-                        <thead>
-                            <tr>
-                                <th className="w-16">ID</th>
-                                <th>Metric Name</th>
-                                <th className="w-16 text-center">Round</th>
-                                <th className="w-24 text-center">Score</th>
-                                <th className="w-10 text-center">Del</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {metrics.length === 0 && (
-                                <tr>
-                                    <td colSpan={4} className="text-center py-8 text-d-gray-400 text-xs italic">
-                                        No metrics yet. Add one below.
-                                    </td>
-                                </tr>
+            {/* 3. Main Dashboard Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+                {/* Left Column: Metrics & Evaluation (2/3) */}
+                <div className="xl:col-span-2 space-y-6">
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                            <div className="space-y-1">
+                                <CardTitle className="text-lg font-heading tracking-wide uppercase text-d-red">Metrics Configuration</CardTitle>
+                                <CardDescription>Manage scoring criteria for each round</CardDescription>
+                            </div>
+                            {metrics.length > 0 && (
+                                <Button variant="ghost" size="sm" className="text-xs text-d-gray-400 hover:text-destructive" onClick={() => confirm('Delete ALL metrics?') && metrics.forEach(m => ops.removeMetric(m.id))}>
+                                    Delete All
+                                </Button>
                             )}
-                            {metrics.map(m => (
-                                <MetricRow key={m.id} id={m.id} name={m.name || ''} max={m.max} round={m.round} onRemove={handleRemoveMetric} />
-                            ))}
-                            {/* Add Row */}
-                            <tr className="bg-d-gray-50/50">
-                                <td className="text-xs text-d-gray-400 px-3 py-2 italic">New</td>
-                                <td className="px-3 py-2">
-                                    <input
-                                        className="input py-1.5 px-3 text-sm w-full border-d-gray-300 focus:border-d-red focus:ring-1 focus:ring-d-red/20"
-                                        placeholder="Metric name"
-                                        value={newName}
-                                        onChange={e => setNewName(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleAddMetric()}
-                                    />
-                                </td>
-                                <td className="px-2 py-2">
-                                    <select className="input py-1.5 px-2 text-xs w-full text-center"
-                                        value={newRound} onChange={e => setNewRound(Number(e.target.value) as 1 | 2 | 3)}>
-                                        <option value={1}>R1</option>
-                                        <option value={2}>R2</option>
-                                        <option value={3}>R3</option>
-                                    </select>
-                                </td>
-                                <td className="px-3 py-2">
-                                    <input
-                                        type="number"
-                                        className="input py-1.5 px-3 text-center text-sm w-full border-d-gray-300"
-                                        placeholder="Score"
-                                        min={1}
-                                        value={newMax}
-                                        onChange={e => setNewMax(Number(e.target.value))}
-                                        onKeyDown={e => e.key === 'Enter' && handleAddMetric()}
-                                    />
-                                </td>
-                                <td className="text-center px-3 py-2">
-                                    <button className="btn-primary py-1.5 px-3 text-xs w-full" onClick={handleAddMetric}>Add</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="rounded-md border border-d-gray-200 overflow-hidden">
+                                <Table>
+                                    <TableHeader className="bg-d-gray-50">
+                                        <TableRow>
+                                            <TableHead className="w-16">ID</TableHead>
+                                            <TableHead>Metric Name</TableHead>
+                                            <TableHead className="w-20 text-center">Round</TableHead>
+                                            <TableHead className="w-24 text-center">Max Score</TableHead>
+                                            <TableHead className="w-12"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {metrics.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="h-24 text-center text-d-gray-400 text-xs italic">
+                                                    No metrics defined. Add one below.
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            metrics.map(m => (
+                                                <MetricRow key={m.id} id={m.id} name={m.name || ''} max={m.max} round={m.round} onRemove={handleRemoveMetric} />
+                                            ))
+                                        )}
+                                        {/* Add New Row */}
+                                        <TableRow className="bg-d-gray-50/50 hover:bg-d-gray-50">
+                                            <TableCell className="text-xs italic text-d-gray-400">New</TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    className="h-8 bg-white"
+                                                    placeholder="Enter metric name..."
+                                                    value={newName}
+                                                    onChange={e => setNewName(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleAddMetric()}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <select
+                                                    className="h-8 w-full rounded-md border border-d-gray-200 bg-white text-xs px-2 cursor-pointer"
+                                                    value={newRound}
+                                                    onChange={e => setNewRound(Number(e.target.value) as 1 | 2 | 3)}
+                                                >
+                                                    <option value={1}>R1</option>
+                                                    <option value={2}>R2</option>
+                                                    <option value={3}>R3</option>
+                                                </select>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Input
+                                                    type="number"
+                                                    className="h-8 bg-white text-center"
+                                                    placeholder="10"
+                                                    value={newMax}
+                                                    onChange={e => setNewMax(Number(e.target.value))}
+                                                    onKeyDown={e => e.key === 'Enter' && handleAddMetric()}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Button size="sm" onClick={handleAddMetric} className="h-8 w-full">Add</Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
-            </div>
 
-            {/* Stats */}
-            <div className="card p-4">
-                <div className="card-section-title mb-2">Quick Stats</div>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                    <div><span className="text-xl font-bold text-d-black">{Object.keys(teams).length}</span><div className="text-[11px] text-d-gray-400">Teams</div></div>
-                    <div><span className="text-xl font-bold text-d-black">{metrics.length}</span><div className="text-[11px] text-d-gray-400">Metrics</div></div>
-                    <div><span className="text-xl font-bold text-d-black">{queued.length}</span><div className="text-[11px] text-d-gray-400">Queued Pings</div></div>
+                {/* Right Column: Controls & Config (1/3) */}
+                <div className="space-y-6">
+                    {/* Game State Control */}
+                    <Card className="border-l-4 border-l-d-black">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-bold uppercase tracking-widest text-d-gray-500">Game State</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div>
+                                <label className="text-xs font-semibold text-d-gray-700 mb-2 block">Active Round</label>
+                                <div className="grid grid-cols-3 gap-1 bg-d-gray-100 p-1 rounded-lg">
+                                    {([1, 2, 3] as const).map(r => (
+                                        <button
+                                            key={r}
+                                            onClick={() => ops.setActiveRound(r)}
+                                            className={cn(
+                                                "py-1.5 text-xs font-bold rounded-md transition-all shadow-sm",
+                                                activeRound === r ? "bg-white text-d-red shadow-sm ring-1 ring-black/5" : "text-d-gray-500 hover:text-d-black hover:bg-white/50"
+                                            )}
+                                        >
+                                            Round {r}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 border border-d-gray-100 rounded-lg bg-d-gray-50/50">
+                                <div className="space-y-0.5">
+                                    <div className="text-sm font-bold text-d-black">Public Scores</div>
+                                    <div className="text-[10px] text-d-gray-500">Show leaderboard to participants</div>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant={publicView ? "default" : "secondary"}
+                                    onClick={() => ops.setPublicView(!publicView)}
+                                    className={cn("w-16 h-7 text-xs", publicView ? "bg-d-red hover:bg-d-red-dark" : "bg-d-gray-200 text-d-gray-500")}
+                                >
+                                    {publicView ? 'ON' : 'OFF'}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Auto Ping Config */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-bold uppercase tracking-widest text-d-gray-500 flex items-center gap-2">
+                                <SignalIcon className="w-4 h-4" /> Auto-Ping
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">System Enabled</span>
+                                <Button
+                                    size="sm"
+                                    variant={autoPing ? "default" : "outline"}
+                                    onClick={() => ops.setAutoPingEnabled(!autoPing)}
+                                    className={cn("h-7 text-xs", autoPing ? "bg-d-black text-white" : "text-d-gray-400")}
+                                >
+                                    {autoPing ? 'Active' : 'Paused'}
+                                </Button>
+                            </div>
+                            <div className="pt-2 border-t border-d-gray-100">
+                                <label className="text-[10px] font-bold text-d-gray-400 uppercase tracking-wider mb-1.5 block">Lead Time (Minutes)</label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="number"
+                                        className="h-8"
+                                        min={1} max={60}
+                                        value={autoPingLead}
+                                        onChange={e => ops.setAutoPingLeadMinutes(Number(e.target.value))}
+                                    />
+                                    <div className="flex items-center text-xs text-d-gray-400 whitespace-nowrap">
+                                        before slot
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Data Export */}
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-bold uppercase tracking-widest text-d-gray-500 flex items-center gap-2">
+                                <ArrowDownTrayIcon className="w-4 h-4" /> Data Export
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                            {([1, 2, 3] as const).map(r => (
+                                <Button
+                                    key={r}
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full justify-between group"
+                                    onClick={() => ops.exportScoresCsv(r)}
+                                >
+                                    <span className="text-xs">Round {r} Scores</span>
+                                    <ArrowDownTrayIcon className="w-3 h-3 text-d-gray-400 group-hover:text-d-black" />
+                                </Button>
+                            ))}
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>
