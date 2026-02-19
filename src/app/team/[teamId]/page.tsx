@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { isTeamAuthed, logoutTeam, useStore, ops, metricsForRound } from '../../../store';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
+import { useNotificationSound, markNotifRead, isNotifRead, getUnreadCount } from '../../../hooks/useNotifications';
+import { showToast } from '../../../components/Toast';
 
 function Progress({ value, max }: { value: number; max: number }) {
     const pct = Math.max(0, Math.min(100, (value / Math.max(1, max)) * 100));
@@ -22,12 +24,10 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
     const metricsAll = useStore((s) => s.metrics);
     const activeRound = useStore(s => s.activeRound ?? 1);
     const team = useMemo(() => (teamId ? teams[teamId] : undefined), [teams, teamId]);
-    const effectiveRound = useMemo(() => (activeRound === 3 && team && !team.finalist ? 2 : activeRound), [activeRound, team]);
-    const metrics = useMemo(() => metricsForRound(effectiveRound as 1 | 2 | 3, metricsAll), [metricsAll, effectiveRound]);
+    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2, metricsAll), [metricsAll, activeRound]);
     const scoresR1 = useStore((s) => s.scores);
     const scoresR2 = useStore((s) => s.scoresRound2 || []);
-    const scoresR3 = useStore((s) => s.scoresRound3 || []);
-    const scores = effectiveRound === 2 ? scoresR2 : effectiveRound === 3 ? scoresR3 : scoresR1;
+    const scores = activeRound === 2 ? scoresR2 : scoresR1;
     const notifications = useStore((s) => s.notifications || []);
     const publicView = useStore((s) => s.publicViewEnabled);
     const authed = teamId ? isTeamAuthed(teamId) : false;
@@ -63,6 +63,8 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
     }
 
     const teamNotifs = notifications.filter(n => n.teamId === teamId);
+    const unreadCount = getUnreadCount(teamId, notifications);
+    useNotificationSound(teamId);
 
     return (
         <div className="space-y-5">
@@ -138,14 +140,27 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
             {/* Notifications */}
             {teamNotifs.length > 0 && (
                 <div className="card p-5">
-                    <div className="card-section-title mb-3">Notifications</div>
+                    <div className="card-section-title mb-3 flex items-center gap-2">
+                        Notifications
+                        {unreadCount > 0 && (
+                            <span className="bg-d-red text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">{unreadCount}</span>
+                        )}
+                    </div>
                     <div className="space-y-1.5 max-h-40 overflow-auto">
-                        {teamNotifs.slice(-10).reverse().map((n) => (
-                            <div key={n.id} className="notification-badge flex items-center justify-between gap-2">
-                                <span className="truncate text-xs">{new Date(n.timestamp).toLocaleTimeString()} — {n.message}</span>
-                                <button className="text-[10px] text-d-red hover:underline flex-shrink-0" onClick={() => ops.deleteNotification(n.id)}>×</button>
-                            </div>
-                        ))}
+                        {teamNotifs.slice(-10).reverse().map((n) => {
+                            const read = isNotifRead(n.id);
+                            return (
+                                <div key={n.id}
+                                    className={`notification-badge flex items-center justify-between gap-2 cursor-pointer transition ${read ? 'opacity-50' : 'bg-d-red/5 border-l-2 border-l-d-red'}`}
+                                    onClick={() => { markNotifRead(n.id); }}
+                                >
+                                    <span className={`truncate text-xs ${read ? '' : 'font-semibold'}`}>
+                                        {new Date(n.timestamp).toLocaleTimeString()} — {n.message}
+                                    </span>
+                                    <button className="text-[10px] text-d-red hover:underline flex-shrink-0" onClick={(e) => { e.stopPropagation(); ops.deleteNotification(n.id); }}>×</button>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -157,13 +172,13 @@ export default function TeamPage({ params }: { params: Promise<{ teamId: string 
                     Please upload your files to Google Drive, Dropbox, or similar, and paste the <strong>shareable link</strong> here.
                     Ensure the link is accessible to "Anyone with the link".
                 </div>
-                <SubmissionLink teamId={teamId} round={activeRound as 1 | 2 | 3} existingUrl={team.submissions?.[activeRound]} />
+                <SubmissionLink teamId={teamId} round={activeRound as 1 | 2} existingUrl={team.submissions?.[activeRound]} />
             </div>
         </div>
     );
 }
 
-function SubmissionLink({ teamId, round, existingUrl }: { teamId: string; round: 1 | 2 | 3; existingUrl?: string }) {
+function SubmissionLink({ teamId, round, existingUrl }: { teamId: string; round: 1 | 2; existingUrl?: string }) {
     const [link, setLink] = useState('');
 
     const handleSubmit = () => {

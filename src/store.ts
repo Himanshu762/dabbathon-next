@@ -38,7 +38,6 @@ function makeDefaultState(): AppState {
         teams: {},
         scores: [],
         scoresRound2: [],
-        scoresRound3: [],
         notifications: [],
         readNotifications: [],
         publicViewEnabled: false,
@@ -88,7 +87,7 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 }
 
 // ─── Metric helpers ───
-export function metricsForRound(round: 1 | 2 | 3, all: Metric[]): Metric[] {
+export function metricsForRound(round: 1 | 2, all: Metric[]): Metric[] {
     return all.filter(m => (m.round || 1) == round);
 }
 
@@ -241,28 +240,6 @@ export async function initFirebaseListeners() {
         });
     });
 
-    // Scores round 3
-    onSnapshot(collection(db, 'scores_round3'), (snap) => {
-        setState((s) => {
-            s.scoresRound3 = s.scoresRound3 || [];
-            snap.docChanges().forEach((change) => {
-                const d = change.doc.data();
-                const entry: ScoreEntry = {
-                    teamId: d.teamId, invigilatorName: d.invigilatorName, metricId: d.metricId,
-                    score: Number(d.score), notes: d.notes || undefined,
-                    timestamp: d.timestamp instanceof Timestamp ? d.timestamp.toMillis() : (d.timestamp || Date.now()),
-                };
-                if (change.type === 'removed') {
-                    s.scoresRound3 = s.scoresRound3!.filter(e => !(e.teamId === entry.teamId && e.metricId === entry.metricId));
-                } else {
-                    const idx = s.scoresRound3!.findIndex(e => e.teamId === entry.teamId && e.metricId === entry.metricId);
-                    if (idx !== -1) s.scoresRound3![idx] = entry;
-                    else s.scoresRound3!.push(entry);
-                }
-            });
-        });
-    });
-
     // Notifications
     onSnapshot(collection(db, 'notifications'), (snap) => {
         setState((s) => {
@@ -394,7 +371,7 @@ function startAutoNotifyScheduler() {
 
 // ─── Domain Operations ───
 export const ops = {
-    setActiveRound(round: 1 | 2 | 3) {
+    setActiveRound(round: 1 | 2) {
         setState((s) => { s.activeRound = round; });
         setDoc(doc(db, 'app_state', 'config'), { activeRound: round }, { merge: true }).catch(console.error);
     },
@@ -415,10 +392,10 @@ export const ops = {
         setState((s) => { s.timerState.session = { isRunning: false }; });
     },
 
-    exportScoresCsv(round: 1 | 2 | 3) {
+    exportScoresCsv(round: 1 | 2) {
         const s = getState();
         let metrics = metricsForRound(round, s.metrics);
-        const scoresAll = round === 2 ? (s.scoresRound2 || []) : (round === 3 ? (s.scoresRound3 || []) : s.scores);
+        const scoresAll = round === 2 ? (s.scoresRound2 || []) : s.scores;
         const scores = scoresAll.filter(sc => !sc.pending);
         const header = ['teamId', ...metrics.map(m => m.name), 'total'];
         const numSort = (a: { id: string }, b: { id: string }) => parseInt(a.id.replace(/\D/g, ''), 10) - parseInt(b.id.replace(/\D/g, ''), 10);
@@ -462,7 +439,7 @@ export const ops = {
         if (m) setDoc(doc(db, 'metrics', m.id), { name: m.name, max: m.max, round: m.round || 1 }, { merge: true }).catch(console.error);
     },
 
-    addMetric(name: string, max = 10, round: 1 | 2 | 3 = 1) {
+    addMetric(name: string, max = 10, round: 1 | 2 = 1) {
         const nm = (name || '').trim();
         if (!nm) return;
         const nums = getState().metrics.map(m => parseInt(m.id.replace(/\D/g, ''), 10)).filter(n => !Number.isNaN(n));
@@ -478,7 +455,6 @@ export const ops = {
             s.metrics = s.metrics.filter(m => m.id !== id);
             s.scores = s.scores.filter(sc => sc.metricId !== id);
             s.scoresRound2 = (s.scoresRound2 || []).filter(sc => sc.metricId !== id);
-            s.scoresRound3 = (s.scoresRound3 || []).filter(sc => sc.metricId !== id);
         });
         deleteDoc(doc(db, 'metrics', id)).catch(console.error);
     },
@@ -587,20 +563,32 @@ export const ops = {
     autoSelectFinalists() {
         const s = getState();
         const teams = Object.values(s.teams);
+        const metricsR1 = metricsForRound(1, s.metrics);
+        const metricsR2 = metricsForRound(2, s.metrics);
         const scoresR1 = s.scores || [];
         const scoresR2 = s.scoresRound2 || [];
 
-        // Calculate total scores (R1 + R2)
-        const teamScores: Record<string, number> = {};
-        scoresR1.forEach(sc => teamScores[sc.teamId] = (teamScores[sc.teamId] || 0) + sc.score);
-        scoresR2.forEach(sc => teamScores[sc.teamId] = (teamScores[sc.teamId] || 0) + sc.score);
+        // Calculate total using latest score per metric (not sum of all entries)
+        const getLatest = (arr: ScoreEntry[], teamId: string, metricId: string) => {
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i].teamId === teamId && arr[i].metricId === metricId) return arr[i].score;
+            }
+            return 0;
+        };
+
+        const teamTotals: Record<string, number> = {};
+        for (const t of teams) {
+            let total = 0;
+            for (const m of metricsR1) total += getLatest(scoresR1, t.id, m.id);
+            for (const m of metricsR2) total += getLatest(scoresR2, t.id, m.id);
+            teamTotals[t.id] = total;
+        }
 
         // Sort descending
-        const sorted = teams.sort((a, b) => (teamScores[b.id] || 0) - (teamScores[a.id] || 0));
+        const sorted = [...teams].sort((a, b) => (teamTotals[b.id] || 0) - (teamTotals[a.id] || 0));
 
         // Pick Top 10
-        const top10 = sorted.slice(0, 10);
-        const top10Ids = new Set(top10.map(t => t.id));
+        const top10Ids = new Set(sorted.slice(0, 10).map(t => t.id));
 
         // Update finalists
         teams.forEach(t => {
@@ -611,10 +599,10 @@ export const ops = {
         });
     },
 
-    async submitScore(round: 1 | 2 | 3, entry: ScoreEntry) {
-        const collName = round === 2 ? 'scores_round2' : round === 3 ? 'scores_round3' : 'scores';
+    async submitScore(round: 1 | 2, entry: ScoreEntry) {
+        const collName = round === 2 ? 'scores_round2' : 'scores';
         setState((s) => {
-            const arr = round === 2 ? (s.scoresRound2 ||= []) : round === 3 ? (s.scoresRound3 ||= []) : s.scores;
+            const arr = round === 2 ? (s.scoresRound2 ||= []) : s.scores;
             const idx = arr.findIndex(e => e.teamId === entry.teamId && e.metricId === entry.metricId);
             if (idx !== -1) arr[idx] = entry;
             else arr.push(entry);
@@ -630,11 +618,10 @@ export const ops = {
         }).catch(console.error);
     },
 
-    async deleteScore(round: 1 | 2 | 3, teamId: string, metricId: string) {
-        const collName = round === 2 ? 'scores_round2' : round === 3 ? 'scores_round3' : 'scores';
+    async deleteScore(round: 1 | 2, teamId: string, metricId: string) {
+        const collName = round === 2 ? 'scores_round2' : 'scores';
         setState((s) => {
             if (round === 2) s.scoresRound2 = (s.scoresRound2 || []).filter(e => !(e.teamId === teamId && e.metricId === metricId));
-            else if (round === 3) s.scoresRound3 = (s.scoresRound3 || []).filter(e => !(e.teamId === teamId && e.metricId === metricId));
             else s.scores = s.scores.filter(e => !(e.teamId === teamId && e.metricId === metricId));
         });
         const docId = `${teamId}_${metricId}`;
@@ -749,7 +736,7 @@ export const ops = {
         const headerLower = headerRow.map(c => c.toLowerCase());
 
         // Detect sections: find column indices for "Round 1", "Round 2", "Finalists"
-        type Section = { label: string; round: 1 | 2 | 3; startCol: number; teamNameCol: number; metricCols: { col: number; name: string }[] };
+        type Section = { label: string; round: 1 | 2; startCol: number; teamNameCol: number; metricCols: { col: number; name: string }[] };
         const sections: Section[] = [];
 
         const sectionMarkers = [
@@ -798,7 +785,7 @@ export const ops = {
         // Process each section
         for (const section of sections) {
             const roundMetrics = allMetrics.filter(m => Number(m.round || 1) === section.round);
-            const collName = section.round === 2 ? 'scores_round2' : section.round === 3 ? 'scores_round3' : 'scores';
+            const collName = section.round === 2 ? 'scores_round2' : 'scores';
 
             // Map CSV metric columns -> store metric IDs
             const colToMetric: { col: number; metricId: string }[] = [];
@@ -857,7 +844,7 @@ export const ops = {
             setState(draft => {
                 for (const ns of newScores) {
                     const round = sections.find(sec => sec.metricCols.some(mc => allMetrics.find(m => m.id === ns.metricId && Number(m.round || 1) === sec.round)))?.round || 1;
-                    const targetArr = round === 2 ? (draft.scoresRound2 ||= []) : round === 3 ? (draft.scoresRound3 ||= []) : draft.scores;
+                    const targetArr = round === 2 ? (draft.scoresRound2 ||= []) : draft.scores;
                     const idx = targetArr.findIndex(x => x.teamId === ns.teamId && x.metricId === ns.metricId);
                     if (idx !== -1) targetArr[idx] = ns;
                     else targetArr.push(ns);

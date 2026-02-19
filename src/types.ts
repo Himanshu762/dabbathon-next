@@ -6,7 +6,7 @@ export interface Metric {
   id: string;
   name: string;
   max: number;
-  round?: 1 | 2 | 3;
+  round?: 1 | 2;
 }
 
 export interface Team {
@@ -55,11 +55,10 @@ export interface AppState {
   teams: Record<string, Team>;
   scores: ScoreEntry[];
   scoresRound2?: ScoreEntry[];
-  scoresRound3?: ScoreEntry[];
-  notifications?: { id: string; teamId: string; message: string; timestamp: number }[];
+  notifications?: { id: string; teamId: string; message: string; timestamp: number; read?: boolean }[];
   readNotifications?: string[];
   publicViewEnabled: boolean;
-  activeRound?: 1 | 2 | 3;
+  activeRound?: 1 | 2;
   timerConfig: TimerConfig;
   timerState: TimerState;
   autoPingEnabled?: boolean;

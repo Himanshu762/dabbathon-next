@@ -12,6 +12,7 @@ import {
     ArrowRightStartOnRectangleIcon,
     Bars3Icon,
     XMarkIcon,
+    TvIcon,
 } from '@heroicons/react/24/outline';
 import { isAdminAuthed, setAdminAuthed } from '../auth';
 import SiteHeader from './SiteHeader';
@@ -22,6 +23,7 @@ const navItems = [
     { href: '/teams', label: 'Teams', icon: UsersIcon },
     { href: '/admin', label: 'Admin', icon: Cog6ToothIcon },
     { href: '/invigilator', label: 'Invigilator', icon: WrenchScrewdriverIcon },
+    { href: '/dashboard/tv', label: 'TV Display', icon: TvIcon },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -37,6 +39,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }, []);
 
     const isLoginPage = pathname === '/';
+    const isTvPage = pathname === '/dashboard/tv';
+
+    // TV dashboard: render completely full-screen, no shell
+    if (isTvPage) return <>{children}</>;
 
     return (
         <div className="min-h-screen flex bg-d-gray-50">
@@ -96,6 +102,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                 );
                             })}
                         </nav>
+
+                        {/* Sync Indicator */}
+                        <div className="px-4 py-2 text-[10px] text-d-gray-400 flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                            <span>Synced · Live</span>
+                        </div>
 
                         {/* Logout */}
                         <div className="p-2 border-t border-d-gray-100">

@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useStore, ops, metricsForRound } from '../../../store';
 import { TrashIcon, PaperAirplaneIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { showToast } from '../../../components/Toast';
 
 function TeamCard({ team, onRemove }: {
     team: { id: string; name: string; username?: string; password?: string; slotTime?: string; room?: string; problemStatement?: string; finalist?: boolean };
@@ -12,7 +13,7 @@ function TeamCard({ team, onRemove }: {
     const metricsAll = useStore(s => s.metrics);
     const scoresR1 = useStore(s => s.scores);
     const scoresR2 = useStore(s => s.scoresRound2 || []);
-    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2 | 3, metricsAll), [metricsAll, activeRound]);
+    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2, metricsAll), [metricsAll, activeRound]);
     const scores = activeRound === 2 ? scoresR2 : scoresR1;
     const teamScores = scores.filter(s => s.teamId === team.id);
 
@@ -41,6 +42,7 @@ function TeamCard({ team, onRemove }: {
         ops.setTeamRoom(team.id, localRoom);
         ops.setTeamProblem(team.id, localProblem);
         ops.setTeamCredential(team.id, localUsername, localPwd);
+        showToast(`${team.name} updated`, 'success');
         setEditing(false);
     };
 
@@ -49,6 +51,7 @@ function TeamCard({ team, onRemove }: {
         ops.notifyTeam(team.id, notifMsg.trim());
         setNotifMsg('');
         setNotifSent(true);
+        showToast(`Notification sent to ${team.name}`, 'success');
         setTimeout(() => setNotifSent(false), 2000);
     };
 
@@ -117,7 +120,7 @@ function TeamCard({ team, onRemove }: {
                 <div className="px-4 pb-3 space-y-2 border-t border-d-gray-100 pt-3">
                     <div className="grid grid-cols-2 gap-2">
                         <input className="input text-xs" placeholder="Name" value={localName} onChange={e => setLocalName(e.target.value)} />
-                        <input className="input text-xs" placeholder="Slot Time" value={localSlot} onChange={e => setLocalSlot(e.target.value)} />
+                        <input className="input text-xs" type="time" placeholder="Slot Time" value={localSlot} onChange={e => setLocalSlot(e.target.value)} />
                         <input className="input text-xs" placeholder="Room" value={localRoom} onChange={e => setLocalRoom(e.target.value)} />
                         <input className="input text-xs" placeholder="Login ID" value={localUsername} onChange={e => setLocalUsername(e.target.value)} />
                         <input className="input text-xs" placeholder="Password" value={localPwd} onChange={e => setLocalPwd(e.target.value)} />

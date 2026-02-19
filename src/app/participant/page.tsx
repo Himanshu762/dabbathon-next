@@ -8,10 +8,9 @@ export default function ParticipantPage() {
     const teams = useStore((s) => s.teams);
     const scoresR1 = useStore((s) => s.scores);
     const scoresR2 = useStore((s) => s.scoresRound2 || []);
-    const scoresR3 = useStore((s) => s.scoresRound3 || []);
     const metricsAll = useStore((s) => s.metrics);
     const activeRound = useStore(s => s.activeRound ?? 1);
-    const headerMetrics = useMemo(() => metricsForRound(activeRound as 1 | 2 | 3, metricsAll), [metricsAll, activeRound]);
+    const headerMetrics = useMemo(() => metricsForRound(activeRound as 1 | 2, metricsAll), [metricsAll, activeRound]);
     const publicView = useStore((s) => s.publicViewEnabled);
     const [query, setQuery] = useState('');
     const notifications = useStore((s) => s.notifications || []);
@@ -47,9 +46,8 @@ export default function ParticipantPage() {
             ) : (
                 <div className="grid md:grid-cols-2 gap-4">
                     {items.map((t) => {
-                        const effRound = activeRound === 3 ? (t.finalist ? 3 : 2) : activeRound;
-                        const metrics = metricsForRound(effRound as 1 | 2 | 3, metricsAll);
-                        const roundScores = effRound === 3 ? scoresR3 : effRound === 2 ? scoresR2 : scoresR1;
+                        const metrics = metricsForRound(activeRound as 1 | 2, metricsAll);
+                        const roundScores = activeRound === 2 ? scoresR2 : scoresR1;
                         const teamScores = roundScores.filter((s) => s.teamId === t.id);
                         const byMetric = metrics.map((m) => {
                             const last = [...teamScores].reverse().find((x) => x.metricId === m.id);

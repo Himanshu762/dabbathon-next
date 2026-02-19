@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { loginTeamByPassword } from '../store';
 import { setAdminAuthed } from '../auth';
 
-type Role = 'participant' | 'faculty' | 'backend' | 'admin';
+type Role = 'participant' | 'faculty' | 'tv' | 'admin';
 
 export default function LoginPage() {
   const [role, setRole] = useState<Role>('participant');
@@ -27,9 +27,9 @@ export default function LoginPage() {
       if (secret === facultyKey) return router.push('/invigilator');
       return alert('Invalid faculty passkey');
     }
-    if (role === 'backend') {
-      if (secret === backendKey) return router.push('/backend');
-      return alert('Invalid backend passkey');
+    if (role === 'tv') {
+      if (secret === backendKey) return router.push('/dashboard/tv');
+      return alert('Invalid passkey');
     }
     if (role === 'admin') {
       if (secret === adminKey) { setAdminAuthed(true); return router.push('/admin'); }
@@ -64,7 +64,7 @@ export default function LoginPage() {
               <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
                 <option value="participant">Participant</option>
                 <option value="faculty">Faculty / Invigilator</option>
-                <option value="backend">Backend Team</option>
+                <option value="tv">TV Dashboard</option>
                 <option value="admin">Admin</option>
               </select>
             </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, ops, metricsForRound } from '../../store';
 import { isAdminAuthed } from '../../auth';
+import { showToast } from '../../components/Toast';
 
 export default function InvigilatorPage() {
     const teams = useStore((s) => s.teams);
@@ -11,7 +12,6 @@ export default function InvigilatorPage() {
     const activeRound = useStore(s => s.activeRound ?? 1);
     const scoresR1 = useStore((s) => s.scores);
     const scoresR2 = useStore((s) => s.scoresRound2 || []);
-    const scoresR3 = useStore((s) => s.scoresRound3 || []);
     const timerConfig = useStore((s) => s.timerConfig);
     const timerState = useStore((s) => s.timerState);
 
@@ -22,8 +22,8 @@ export default function InvigilatorPage() {
     const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
     const isAdmin = isAdminAuthed();
 
-    const scores = activeRound === 2 ? scoresR2 : activeRound === 3 ? scoresR3 : scoresR1;
-    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2 | 3, metricsAll), [metricsAll, activeRound]);
+    const scores = activeRound === 2 ? scoresR2 : scoresR1;
+    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2, metricsAll), [metricsAll, activeRound]);
 
     const roomTeams = useMemo(() => {
         if (!roomId) return [];
@@ -85,6 +85,12 @@ export default function InvigilatorPage() {
                 <span className="text-d-gray-500">Room: <strong className="text-d-black">{rooms[roomId]?.title || roomId}</strong></span>
                 <span className="text-d-gray-500">Invigilator: <strong className="text-d-black">{invigilatorName}</strong></span>
                 <span className="text-d-gray-500">Teams: <strong className="text-d-black">{roomTeams.length}</strong></span>
+                <button
+                    className="ml-auto text-d-gray-400 hover:text-d-red text-xs font-medium transition"
+                    onClick={() => window.location.assign('/')}
+                >
+                    Logout
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -102,7 +108,6 @@ export default function InvigilatorPage() {
                                             'bg-white border border-d-gray-200 text-d-black hover:border-d-gray-300'
                                         }`}>
                                     <div className="font-medium">{t.name}</div>
-                                    <div className="text-[11px] opacity-70">{t.id} · {t.slotTime || 'No slot'}</div>
                                     <div className="text-[11px] opacity-70">{t.id} · {t.slotTime || 'No slot'}</div>
                                     <div className="flex flex-wrap gap-2 mt-1">
                                         {teamScored && !isSelected && <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">✓ Scored</span>}
@@ -123,7 +128,7 @@ export default function InvigilatorPage() {
                             team={selectedTeam}
                             metrics={metrics}
                             scores={scores.filter(s => s.teamId === selectedTeamId)}
-                            round={activeRound as 1 | 2 | 3}
+                            round={activeRound as 1 | 2}
                             invigilatorName={invigilatorName}
                             roomId={roomId}
                             timerConfig={timerConfig}
@@ -147,7 +152,7 @@ function ScoringPanel({
     team: { id: string; name: string; slotTime?: string; problemStatement?: string; submissions?: Record<string, string> };
     metrics: { id: string; name: string; max: number }[];
     scores: { teamId: string; metricId: string; score: number; notes?: string }[];
-    round: 1 | 2 | 3;
+    round: 1 | 2;
     invigilatorName: string;
     roomId: string;
     timerConfig: { sessionDurationSec: number; teamDurationSec: number };
@@ -175,6 +180,7 @@ function ScoringPanel({
             const d = drafts[m.id];
             if (d) await ops.submitScore(round, { teamId: team.id, metricId: m.id, score: d.score, notes: d.notes, invigilatorName, timestamp: Date.now() });
         }
+        showToast(`Scores submitted for ${team.name}`, 'success');
     };
 
     const total = useMemo(() => metrics.reduce((sum, m) => sum + (drafts[m.id]?.score ?? 0), 0), [metrics, drafts]);
@@ -186,7 +192,6 @@ function ScoringPanel({
             <div className="flex items-center justify-between">
                 <div>
                     <div className="font-heading text-lg font-bold text-d-black">{team.name}</div>
-                    <div className="text-[11px] text-d-gray-400">{team.id} · Slot: {team.slotTime || 'N/A'}</div>
                     <div className="text-[11px] text-d-gray-400">{team.id} · Slot: {team.slotTime || 'N/A'}</div>
                     {team.submissions?.[round] && (
                         <div className="mt-2">

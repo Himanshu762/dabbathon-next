@@ -7,11 +7,10 @@ export default function DashboardPage() {
     const teams = useStore((s) => s.teams);
     const scoresR1 = useStore((s) => s.scores);
     const scoresR2 = useStore((s) => s.scoresRound2 || []);
-    const scoresR3 = useStore((s) => s.scoresRound3 || []);
     const metricsAll = useStore((s) => s.metrics);
     const activeRound = useStore(s => s.activeRound ?? 1);
-    const scores = activeRound === 2 ? scoresR2 : activeRound === 3 ? scoresR3 : scoresR1;
-    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2 | 3, metricsAll), [metricsAll, activeRound]);
+    const scores = activeRound === 2 ? scoresR2 : scoresR1;
+    const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2, metricsAll), [metricsAll, activeRound]);
     const publicView = useStore((s) => s.publicViewEnabled);
     const [query, setQuery] = useState('');
 
@@ -20,9 +19,6 @@ export default function DashboardPage() {
             t.id.toLowerCase().includes(query.toLowerCase()) ||
             (t.name || '').toLowerCase().includes(query.toLowerCase())
         );
-        if (activeRound === 3 && arr.some(t => t.finalist !== undefined)) {
-            arr = arr.filter(t => t.finalist);
-        }
         const getTotal = (t: typeof arr[0]) => {
             return metrics.reduce((sum, m) => {
                 const last = [...scores].reverse().find(x => x.teamId === t.id && x.metricId === m.id);
@@ -45,7 +41,6 @@ export default function DashboardPage() {
                 <span className={`badge ${publicView ? 'badge-red' : 'badge-outline'}`}>
                     Public: {publicView ? 'ON' : 'OFF'}
                 </span>
-                {activeRound === 3 && <span className="badge badge-red">Finalists Only</span>}
             </div>
 
             {/* Search */}

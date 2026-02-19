@@ -41,11 +41,10 @@ function MetricRow({ id, name, max, round, onRemove }: {
                 <select
                     className="h-8 w-full rounded-md border-transparent bg-transparent text-xs focus:ring-1 focus:ring-d-gray-200 hover:bg-d-gray-50 cursor-pointer text-center"
                     value={round || 1}
-                    onChange={(e) => ops.updateMetric(id, { round: Number(e.target.value) as 1 | 2 | 3 })}
+                    onChange={(e) => ops.updateMetric(id, { round: Number(e.target.value) as 1 | 2 })}
                 >
                     <option value={1}>R1</option>
                     <option value={2}>R2</option>
-                    <option value={3}>R3</option>
                 </select>
             </TableCell>
             <TableCell className="w-24">
@@ -94,13 +93,13 @@ export default function AdminOverviewPage() {
     const allMetrics = useStore(s => s.metrics);
     const metrics = useMemo(() => allMetrics.filter(m => Number(m.round || 1) === activeRound), [allMetrics, activeRound]);
     const teams = useStore(s => s.teams);
-    const queued = useMemo(() => getQueuedAutoPings(), []);
+    const queued = useMemo(() => getQueuedAutoPings(), [teams]);
 
     // New Metric State
     const [newName, setNewName] = useState('');
     const [newMax, setNewMax] = useState(10);
-    const [newRound, setNewRound] = useState<1 | 2 | 3>(1);
-    useEffect(() => setNewRound(activeRound as 1 | 2 | 3), [activeRound]);
+    const [newRound, setNewRound] = useState<1 | 2>(1);
+    useEffect(() => setNewRound(activeRound as 1 | 2), [activeRound]);
 
     const handleAddMetric = () => {
         if (!newName.trim()) return;
@@ -198,11 +197,10 @@ export default function AdminOverviewPage() {
                                                 <select
                                                     className="h-8 w-full rounded-md border border-d-gray-200 bg-white text-xs px-2 cursor-pointer"
                                                     value={newRound}
-                                                    onChange={e => setNewRound(Number(e.target.value) as 1 | 2 | 3)}
+                                                    onChange={e => setNewRound(Number(e.target.value) as 1 | 2)}
                                                 >
                                                     <option value={1}>R1</option>
                                                     <option value={2}>R2</option>
-                                                    <option value={3}>R3</option>
                                                 </select>
                                             </TableCell>
                                             <TableCell>
@@ -236,8 +234,8 @@ export default function AdminOverviewPage() {
                         <CardContent className="space-y-4">
                             <div>
                                 <label className="text-xs font-semibold text-d-gray-700 mb-2 block">Active Round</label>
-                                <div className="grid grid-cols-3 gap-1 bg-d-gray-100 p-1 rounded-lg">
-                                    {([1, 2, 3] as const).map(r => (
+                                <div className="grid grid-cols-2 gap-1 bg-d-gray-100 p-1 rounded-lg">
+                                    {([1, 2] as const).map(r => (
                                         <button
                                             key={r}
                                             onClick={() => ops.setActiveRound(r)}
@@ -314,7 +312,7 @@ export default function AdminOverviewPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2">
-                            {([1, 2, 3] as const).map(r => (
+                            {([1, 2] as const).map(r => (
                                 <Button
                                     key={r}
                                     variant="outline"
