@@ -89,7 +89,7 @@ export function useStore<T>(selector: (s: AppState) => T): T {
 
 // ─── Metric helpers ───
 export function metricsForRound(round: 1 | 2 | 3, all: Metric[]): Metric[] {
-    return all.filter(m => (m.round || 1) === round);
+    return all.filter(m => (m.round || 1) == round);
 }
 
 
@@ -362,19 +362,28 @@ function runAutoNotifySweep() {
     if (s.autoPingEnabled === false) return;
     const teams = Object.values(s.teams);
     const now = new Date();
+    const leadTimes = [s.autoPingLeadMinutes ?? 5, 2]; // Primary lead + 2-minute warning
+
     for (const t of teams) {
         const start = parseSlotStart(t.slotTime);
         if (!start) continue;
         const label = t.slotTime || '';
-        if (hasBeenNotified(t.id, label)) continue;
-        const lead = s.autoPingLeadMinutes ?? 5;
         const diffMs = start.getTime() - now.getTime();
-        if (diffMs <= lead * 60 * 1000 && diffMs > 0) {
-            const hh = String(start.getHours()).padStart(2, '0');
-            const mm = String(start.getMinutes()).padStart(2, '0');
-            const msg = `You're up in ${lead} minutes for your presentation slot at ${hh}:${mm} (${label}). Please be ready.`;
-            ops.notifyTeam(t.id, msg);
-            markNotified(t.id, label);
+        if (diffMs <= 0) continue; // Slot already passed
+
+        const hh = String(start.getHours()).padStart(2, '0');
+        const mm = String(start.getMinutes()).padStart(2, '0');
+
+        for (const lead of leadTimes) {
+            const dedupKey = `${label}@${lead}m`;
+            if (hasBeenNotified(t.id, dedupKey)) continue;
+            if (diffMs <= lead * 60 * 1000) {
+                const msg = lead === 2
+                    ? `⚡ 2 minutes! Your slot at ${hh}:${mm} (${label}) is about to start. Head over now!`
+                    : `You're up in ${lead} minutes for your presentation slot at ${hh}:${mm} (${label}). Please be ready.`;
+                ops.notifyTeam(t.id, msg);
+                markNotified(t.id, dedupKey);
+            }
         }
     }
 }
@@ -409,7 +418,6 @@ export const ops = {
     exportScoresCsv(round: 1 | 2 | 3) {
         const s = getState();
         let metrics = metricsForRound(round, s.metrics);
-        if (round !== 1) metrics = metrics.filter(m => !(m.id === 'm6' || m.name.toLowerCase() === 'report'));
         const scoresAll = round === 2 ? (s.scoresRound2 || []) : (round === 3 ? (s.scoresRound3 || []) : s.scores);
         const scores = scoresAll.filter(sc => !sc.pending);
         const header = ['teamId', ...metrics.map(m => m.name), 'total'];
@@ -696,6 +704,172 @@ export const ops = {
     resetTeamTimer(roomId: string, teamId: string) {
         const key = `${roomId}:${teamId}`;
         setState(s => { s.timerState.teams[key] = undefined; });
+    },
+
+    async importScores(csvText: string) {
+        const rawLines = csvText.split(/\r?\n/);
+        if (rawLines.length < 3) return { count: 0, message: 'Empty or invalid CSV' };
+
+        // CSV parser (handles quoted fields)
+        const parseLine = (line: string) => {
+            const res: string[] = [];
+            let current = '';
+            let inQuote = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') inQuote = !inQuote;
+                else if (char === ',' && !inQuote) {
+                    res.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            res.push(current.trim());
+            return res;
+        };
+
+        // Parse all rows
+        const allRows = rawLines.map(l => parseLine(l));
+
+        // Find the header row (contains "Round 1" or "Team Name")
+        let headerIdx = -1;
+        for (let i = 0; i < Math.min(allRows.length, 10); i++) {
+            const lower = allRows[i].map(c => c.replace(/^"|"$/g, '').toLowerCase());
+            if (lower.includes('round 1') || lower.some(c => c === 'team name')) {
+                headerIdx = i;
+                break;
+            }
+        }
+        if (headerIdx === -1) {
+            return { count: 0, message: 'Could not find header row (looking for "Round 1" or "Team Name").' };
+        }
+
+        const headerRow = allRows[headerIdx].map(c => c.replace(/^"|"$/g, ''));
+        const headerLower = headerRow.map(c => c.toLowerCase());
+
+        // Detect sections: find column indices for "Round 1", "Round 2", "Finalists"
+        type Section = { label: string; round: 1 | 2 | 3; startCol: number; teamNameCol: number; metricCols: { col: number; name: string }[] };
+        const sections: Section[] = [];
+
+        const sectionMarkers = [
+            { key: 'round 1', round: 1 as const },
+            { key: 'round 2', round: 2 as const },
+        ];
+
+        for (const marker of sectionMarkers) {
+            const idx = headerLower.indexOf(marker.key);
+            if (idx === -1) continue;
+
+            // Team Name column is the next column after the marker
+            const teamNameCol = idx + 1;
+            if (headerLower[teamNameCol] !== 'team name') continue;
+
+            // Metric columns: everything after Team Name until we hit "Total", "Rank", empty, or another section
+            const metricCols: { col: number; name: string }[] = [];
+            for (let c = teamNameCol + 1; c < headerRow.length; c++) {
+                const val = headerLower[c];
+                if (!val || val === 'total' || val === 'rank' || sectionMarkers.some(m => m.key === val)) break;
+                metricCols.push({ col: c, name: headerRow[c] });
+            }
+
+            sections.push({
+                label: marker.key,
+                round: marker.round,
+                startCol: idx,
+                teamNameCol,
+                metricCols,
+            });
+        }
+
+        if (sections.length === 0) {
+            return { count: 0, message: `Could not detect any round sections. Header: ${headerRow.slice(0, 10).join(', ')}` };
+        }
+
+        // Get state
+        const s = getState();
+        const allMetrics = s.metrics;
+        const batch = writeBatch(db);
+        const newScores: ScoreEntry[] = [];
+        let updateCount = 0;
+        let rowsProcessed = 0;
+        const importLog: string[] = [];
+
+        // Process each section
+        for (const section of sections) {
+            const roundMetrics = allMetrics.filter(m => Number(m.round || 1) === section.round);
+            const collName = section.round === 2 ? 'scores_round2' : section.round === 3 ? 'scores_round3' : 'scores';
+
+            // Map CSV metric columns -> store metric IDs
+            const colToMetric: { col: number; metricId: string }[] = [];
+            for (const mc of section.metricCols) {
+                // Try exact match first
+                let matched = roundMetrics.find(rm => rm.name.toLowerCase() === mc.name.toLowerCase());
+                // Fuzzy match
+                if (!matched) matched = roundMetrics.find(rm => mc.name.toLowerCase().includes(rm.name.toLowerCase()) || rm.name.toLowerCase().includes(mc.name.toLowerCase()));
+                if (matched) {
+                    colToMetric.push({ col: mc.col, metricId: matched.id });
+                }
+            }
+
+            if (colToMetric.length === 0) {
+                importLog.push(`Round ${section.round}: no metric matches (CSV cols: ${section.metricCols.map(c => c.name).join(', ')})`);
+                continue;
+            }
+
+            // Process data rows
+            for (let i = headerIdx + 1; i < allRows.length; i++) {
+                const row = allRows[i];
+                const teamName = row[section.teamNameCol]?.replace(/^"|"$/g, '').trim();
+                if (!teamName) continue;
+                rowsProcessed++;
+
+                // Find team by name (case-insensitive)
+                const team = Object.values(s.teams).find(t =>
+                    t.name.toLowerCase() === teamName.toLowerCase() ||
+                    t.id.toLowerCase() === teamName.toLowerCase()
+                );
+                if (!team) continue;
+
+                for (const { col, metricId } of colToMetric) {
+                    const raw = row[col]?.replace(/^"|"$/g, '').trim();
+                    if (!raw || raw === '#DIV/0!' || raw === '#N/A' || raw === '#REF!') continue;
+                    const val = Number(raw);
+                    if (isNaN(val)) continue;
+
+                    const entry: ScoreEntry = {
+                        teamId: team.id,
+                        metricId,
+                        invigilatorName: 'Imported',
+                        score: val,
+                        timestamp: Date.now(),
+                    };
+                    newScores.push(entry);
+                    batch.set(doc(db, collName, `${team.id}_${metricId}`), entry);
+                }
+                updateCount++;
+            }
+            importLog.push(`Round ${section.round}: mapped ${colToMetric.length} metrics`);
+        }
+
+        if (newScores.length > 0) {
+            await batch.commit();
+            setState(draft => {
+                for (const ns of newScores) {
+                    const round = sections.find(sec => sec.metricCols.some(mc => allMetrics.find(m => m.id === ns.metricId && Number(m.round || 1) === sec.round)))?.round || 1;
+                    const targetArr = round === 2 ? (draft.scoresRound2 ||= []) : round === 3 ? (draft.scoresRound3 ||= []) : draft.scores;
+                    const idx = targetArr.findIndex(x => x.teamId === ns.teamId && x.metricId === ns.metricId);
+                    if (idx !== -1) targetArr[idx] = ns;
+                    else targetArr.push(ns);
+                }
+            });
+        }
+
+        if (updateCount === 0) {
+            return { count: 0, message: `Processed ${rowsProcessed} rows but matched 0 teams. ${importLog.join('. ')}` };
+        }
+
+        return { count: updateCount, message: `Success: ${newScores.length} scores for ${updateCount} team-rows. ${importLog.join('. ')}` };
     },
 };
 

@@ -12,7 +12,6 @@ import {
     ArrowRightStartOnRectangleIcon,
     Bars3Icon,
     XMarkIcon,
-    ServerStackIcon,
 } from '@heroicons/react/24/outline';
 import { isAdminAuthed, setAdminAuthed } from '../auth';
 import SiteHeader from './SiteHeader';
@@ -23,7 +22,6 @@ const navItems = [
     { href: '/teams', label: 'Teams', icon: UsersIcon },
     { href: '/admin', label: 'Admin', icon: Cog6ToothIcon },
     { href: '/invigilator', label: 'Invigilator', icon: WrenchScrewdriverIcon },
-    { href: '/backend', label: 'Backend', icon: ServerStackIcon },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

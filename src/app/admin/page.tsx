@@ -91,7 +91,8 @@ export default function AdminOverviewPage() {
     const publicView = useStore(s => s.publicViewEnabled);
     const autoPing = useStore(s => s.autoPingEnabled ?? true);
     const autoPingLead = useStore(s => s.autoPingLeadMinutes ?? 5);
-    const metrics = useStore(s => s.metrics);
+    const allMetrics = useStore(s => s.metrics);
+    const metrics = useMemo(() => allMetrics.filter(m => Number(m.round || 1) === activeRound), [allMetrics, activeRound]);
     const teams = useStore(s => s.teams);
     const queued = useMemo(() => getQueuedAutoPings(), []);
 
@@ -136,7 +137,7 @@ export default function AdminOverviewPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <StatCard label="Active Round" value={`Round ${activeRound}`} highlight />
                 <StatCard label="Registered Teams" value={Object.keys(teams).length} subtext="Total teams" />
-                <StatCard label="Metrics Configured" value={metrics.length} subtext="Across all rounds" />
+                <StatCard label={`Metrics (R${activeRound})`} value={metrics.length} subtext={`${allMetrics.length} total across all rounds`} />
                 <StatCard label="Queued Pings" value={queued.length} subtext="Auto-notifications" />
             </div>
 
@@ -152,7 +153,7 @@ export default function AdminOverviewPage() {
                                 <CardDescription>Manage scoring criteria for each round</CardDescription>
                             </div>
                             {metrics.length > 0 && (
-                                <Button variant="ghost" size="sm" className="text-xs text-d-gray-400 hover:text-destructive" onClick={() => confirm('Delete ALL metrics?') && metrics.forEach(m => ops.removeMetric(m.id))}>
+                                <Button variant="ghost" size="sm" className="text-xs text-d-gray-400 hover:text-destructive" onClick={() => confirm(`Delete all Round ${activeRound} metrics?`) && metrics.forEach(m => ops.removeMetric(m.id))}>
                                     Delete All
                                 </Button>
                             )}
@@ -327,8 +328,121 @@ export default function AdminOverviewPage() {
                             ))}
                         </CardContent>
                     </Card>
+
+                    {/* Data Import */}
+                    <ScoreImporter />
                 </div>
             </div>
         </div>
+    );
+}
+
+import { fetchGoogleSheetCsv } from '../actions';
+
+function ScoreImporter() {
+    const [mode, setMode] = useState<'file' | 'url'>('url');
+    const [url, setUrl] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+
+    const handleImport = async (csvText: string) => {
+        setLoading(true);
+        setStatus(null);
+        try {
+            const res = await ops.importScores(csvText);
+            if (res.message.includes('Could not match')) {
+                setStatus({ type: 'error', msg: res.message });
+            } else {
+                setStatus({ type: 'success', msg: res.message });
+            }
+        } catch (e) {
+            setStatus({ type: 'error', msg: 'Import failed: ' + (e as Error).message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onUrlSubmit = async () => {
+        if (!url) return;
+        setLoading(true);
+        setStatus(null);
+        const res = await fetchGoogleSheetCsv(url);
+        if (res.error) {
+            setStatus({ type: 'error', msg: res.error });
+            setLoading(false);
+            return;
+        }
+        if (res.csv) {
+            await handleImport(res.csv);
+        }
+    };
+
+    const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            const text = evt.target?.result as string;
+            if (text) await handleImport(text);
+        };
+        reader.readAsText(file);
+    };
+
+    return (
+        <Card>
+            <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-bold uppercase tracking-widest text-d-gray-500 flex items-center gap-2">
+                    <ArrowDownTrayIcon className="w-4 h-4 rotate-180" /> Import Scores
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="flex p-1 bg-d-gray-100 rounded-lg">
+                    <button
+                        className={cn("flex-1 py-1 text-xs font-semibold rounded-md transition-all", mode === 'url' ? "bg-white text-d-red shadow-sm" : "text-d-gray-500")}
+                        onClick={() => setMode('url')}
+                    >
+                        Google Sheet
+                    </button>
+                    <button
+                        className={cn("flex-1 py-1 text-xs font-semibold rounded-md transition-all", mode === 'file' ? "bg-white text-d-red shadow-sm" : "text-d-gray-500")}
+                        onClick={() => setMode('file')}
+                    >
+                        CSV File
+                    </button>
+                </div>
+
+                {mode === 'url' ? (
+                    <div className="space-y-2">
+                        <Input
+                            className="h-8 text-xs font-mono"
+                            placeholder="https://docs.google.com/spreadsheets/..."
+                            value={url}
+                            onChange={e => setUrl(e.target.value)}
+                        />
+                        <Button size="sm" className="w-full h-8 text-xs" onClick={onUrlSubmit} disabled={loading}>
+                            {loading ? 'Fetching...' : 'Fetch & Import'}
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        <Input
+                            type="file"
+                            accept=".csv"
+                            className="h-8 text-xs file:text-xs file:bg-d-gray-100 file:border-0 file:rounded-sm file:px-2 file:mr-2 cursor-pointer"
+                            onChange={onFileChange}
+                            disabled={loading}
+                        />
+                        {loading && <div className="text-xs text-d-gray-400 text-center">Processing file...</div>}
+                    </div>
+                )}
+
+                {status && (
+                    <div className={cn("text-xs p-2 rounded border",
+                        status.type === 'success' ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200")}>
+                        {status.msg}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
     );
 }

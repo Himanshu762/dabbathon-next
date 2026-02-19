@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore, ops, metricsForRound } from '../../store';
+import { isAdminAuthed } from '../../auth';
 
 export default function InvigilatorPage() {
     const teams = useStore((s) => s.teams);
@@ -19,6 +20,7 @@ export default function InvigilatorPage() {
     const [roomId, setRoomId] = useState('');
     const [roomPassword, setRoomPassword] = useState('');
     const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+    const isAdmin = isAdminAuthed();
 
     const scores = activeRound === 2 ? scoresR2 : activeRound === 3 ? scoresR3 : scoresR1;
     const metrics = useMemo(() => metricsForRound(activeRound as 1 | 2 | 3, metricsAll), [metricsAll, activeRound]);
@@ -37,10 +39,17 @@ export default function InvigilatorPage() {
     const tryEnter = () => {
         const room = rooms[roomId];
         if (!room) return alert('Room not found');
-        if (room.password && room.password !== roomPassword) return alert('Incorrect room password');
+        if (!isAdmin && room.password && room.password !== roomPassword) return alert('Incorrect room password');
         if (!invigilatorName.trim()) return alert('Enter your name');
         setLoggedIn(true);
     };
+
+    // Admin auto-login: skip room password check
+    useEffect(() => {
+        if (isAdmin && !loggedIn && roomId && invigilatorName) {
+            setLoggedIn(true);
+        }
+    }, [isAdmin, roomId, invigilatorName, loggedIn]);
 
     if (!loggedIn) {
         return (
@@ -119,6 +128,7 @@ export default function InvigilatorPage() {
                             roomId={roomId}
                             timerConfig={timerConfig}
                             timerState={timerState}
+                            isAdmin={isAdmin}
                         />
                     ) : (
                         <div className="card p-12 text-center">
@@ -132,7 +142,7 @@ export default function InvigilatorPage() {
 }
 
 function ScoringPanel({
-    team, metrics, scores, round, invigilatorName, roomId, timerConfig, timerState,
+    team, metrics, scores, round, invigilatorName, roomId, timerConfig, timerState, isAdmin,
 }: {
     team: { id: string; name: string; slotTime?: string; problemStatement?: string; submissions?: Record<string, string> };
     metrics: { id: string; name: string; max: number }[];
@@ -142,7 +152,10 @@ function ScoringPanel({
     roomId: string;
     timerConfig: { sessionDurationSec: number; teamDurationSec: number };
     timerState: { teams: Record<string, { startedAt?: number; pausedAt?: number; isRunning: boolean } | undefined> };
+    isAdmin?: boolean;
 }) {
+    const alreadyScored = metrics.some(m => scores.some(s => s.metricId === m.id));
+    const locked = alreadyScored && !isAdmin;
     const [drafts, setDrafts] = useState<Record<string, { score: number; notes: string }>>({});
 
     useEffect(() => {
@@ -216,7 +229,7 @@ function ScoringPanel({
                 {metrics.map(m => {
                     const d = drafts[m.id] ?? { score: 0, notes: '' };
                     return (
-                        <div key={m.id} className="rounded-lg border border-d-gray-100 p-3 bg-white space-y-2">
+                        <div key={m.id} className={`rounded-lg border p-3 bg-white space-y-2 ${locked ? 'border-d-gray-100 opacity-60' : 'border-d-gray-100'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="text-sm font-medium text-d-black">{m.name}</div>
                                 <div className="text-xs text-d-gray-400">max {m.max}</div>
@@ -224,18 +237,25 @@ function ScoringPanel({
                             <div className="flex items-center gap-3">
                                 <input type="range" min={0} max={m.max} step={0.5} value={d.score}
                                     onChange={e => setScore(m.id, Number(e.target.value))}
+                                    disabled={locked}
                                     className="flex-1 accent-[#D32F2F]" />
                                 <input type="number" className="input w-16 text-center" min={0} max={m.max} step={0.5}
-                                    value={d.score} onChange={e => setScore(m.id, Number(e.target.value))} />
+                                    value={d.score} onChange={e => setScore(m.id, Number(e.target.value))} disabled={locked} />
                             </div>
                             <input className="input text-xs" placeholder="Notes (optional)" value={d.notes}
-                                onChange={e => setNotes(m.id, e.target.value)} />
+                                onChange={e => setNotes(m.id, e.target.value)} disabled={locked} />
                         </div>
                     );
                 })}
             </div>
 
-            <button className="btn-primary w-full text-sm" onClick={submitAll}>Submit All Scores</button>
+            {locked ? (
+                <div className="text-center text-xs text-d-gray-400 bg-d-gray-50 border border-d-gray-200 rounded-lg py-3">
+                    ✓ Scores submitted. Only an admin can modify scores.
+                </div>
+            ) : (
+                <button className="btn-primary w-full text-sm" onClick={submitAll}>Submit All Scores</button>
+            )}
         </div>
     );
 }
