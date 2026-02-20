@@ -82,40 +82,38 @@ export default function TVDashboard() {
                         <p className="text-white/10 text-lg">Waiting for teams...</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         {board.map((team) => (
                             <div
                                 key={team.id}
-                                className="rounded-xl flex items-center gap-1 px-3 py-2 transition-all duration-500"
+                                className="rounded-xl flex items-stretch overflow-hidden transition-all duration-500 aspect-[4/3]"
                                 style={{
                                     background: 'rgba(255,255,255,0.025)',
                                     border: '1px solid rgba(255,255,255,0.04)',
                                 }}
                             >
-                                {/* Radar Chart */}
-                                <div className="w-40 h-36 flex-shrink-0 -ml-2">
+                                {/* Radar Chart — fills card height */}
+                                <div className="w-[60%] flex-shrink-0 p-2">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <RadarChart data={team.radarData} outerRadius="70%">
-                                            <PolarGrid stroke="rgba(255,255,255,0.06)" />
-                                            <PolarAngleAxis dataKey="metric" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+                                        <RadarChart data={team.radarData} outerRadius="85%" cx="50%" cy="50%">
+                                            <PolarGrid stroke="rgba(255,255,255,0.08)" />
+                                            <PolarAngleAxis dataKey="metric" tick={false} />
                                             <PolarRadiusAxis domain={[0, globalMax]} tick={false} axisLine={false} />
-                                            <Radar dataKey="score" stroke="#FF4444" fill="#FF4444" fillOpacity={0.2} strokeWidth={2} />
+                                            <Radar dataKey="score" stroke="#FF4444" fill="#FF4444" fillOpacity={0.25} strokeWidth={2} />
                                         </RadarChart>
                                     </ResponsiveContainer>
                                 </div>
 
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-base font-bold text-white/80 truncate leading-snug">
+                                {/* Name + Score — vertically centered */}
+                                <div className="flex-1 flex flex-col justify-center pr-5">
+                                    <div className="text-3xl font-bold text-white/80 truncate">
                                         {team.name}
                                     </div>
                                     <div className="mt-2 flex items-baseline gap-1.5">
-                                        <span className="text-3xl font-bold tabular-nums text-white/90 leading-none">
+                                        <span className="text-6xl font-bold tabular-nums text-white/90 leading-none">
                                             {team.total}
                                         </span>
-                                        <span className="text-sm text-white/20 font-normal">
-                                            /{maxPossible}
-                                        </span>
+                                        <span className="text-sm text-white/20">/{maxPossible}</span>
                                     </div>
                                 </div>
                             </div>
