@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useEffect, useState, useRef } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useStore, metricsForRound } from '../../../store';
 import { useRouter } from 'next/navigation';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 
 const REFRESH_MS = 10_000;
 
@@ -26,168 +27,108 @@ export default function TVDashboard() {
     }, []);
 
     const maxPossible = metrics.reduce((s, m) => s + m.max, 0) || 1;
+    const globalMax = Math.max(...metrics.map(m => m.max), 1);
 
     const board = useMemo(() => {
         return Object.values(teams).map(t => {
-            const total = metrics.reduce((sum, m) => {
+            const radarData = metrics.map(m => {
+                let score = 0;
                 for (let i = scores.length - 1; i >= 0; i--) {
-                    if (scores[i].teamId === t.id && scores[i].metricId === m.id) return sum + scores[i].score;
+                    if (scores[i].teamId === t.id && scores[i].metricId === m.id) { score = scores[i].score; break; }
                 }
-                return sum;
-            }, 0);
-            return { name: t.name || t.id, total, id: t.id };
-        }).sort((a, b) => b.total - a.total);
+                return { metric: m.name, score, max: m.max };
+            });
+            const total = radarData.reduce((sum, d) => sum + d.score, 0);
+            return { name: t.name || t.id, total, id: t.id, radarData };
+        }).sort((a, b) => a.name.localeCompare(b.name));
     }, [teams, metrics, scores, tick]);
 
-    const top3 = board.slice(0, 3);
-    const rest = board.slice(3);
-    // Podium order: 2nd, 1st, 3rd
-    const podiumOrder = top3.length >= 3 ? [top3[1], top3[0], top3[2]] : top3;
-
-    const podiumStyles = [
-        // 2nd place
-        { height: '55%', bg: 'linear-gradient(180deg, #334155 0%, #1e293b 100%)', border: '#94a3b8', glow: 'rgba(148,163,184,0.15)', accent: '#C0C0C0', label: '2ND', emoji: '🥈' },
-        // 1st place
-        { height: '75%', bg: 'linear-gradient(180deg, #92400e 0%, #78350f 50%, #451a03 100%)', border: '#f59e0b', glow: 'rgba(245,158,11,0.25)', accent: '#FFD700', label: '1ST', emoji: '🥇' },
-        // 3rd place
-        { height: '42%', bg: 'linear-gradient(180deg, #44403c 0%, #292524 100%)', border: '#a8a29e', glow: 'rgba(168,162,158,0.12)', accent: '#CD7F32', label: '3RD', emoji: '🥉' },
-    ];
-
     return (
-        <div className="h-screen w-screen overflow-hidden flex flex-col" style={{ background: 'radial-gradient(ellipse at top, #1a0a0a 0%, #0a0a0a 50%, #000 100%)' }}>
+        <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#060606]">
 
-            {/* ── Top Bar ── */}
-            <div className="flex items-center justify-between px-8 py-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,68,68,0.1)' }}>
-                <div className="flex items-center gap-3">
-                    <div className="w-2 h-8 rounded-full bg-[#FF4444]" />
+            {/* Header */}
+            <div className="flex items-center justify-between px-10 py-4 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                <div className="flex items-center gap-4">
+                    <svg className="w-7 h-7 text-[#FF4444]" viewBox="0 0 64 64" fill="currentColor">
+                        <rect x="14" y="16" width="36" height="8" rx="2" opacity="0.95" />
+                        <rect x="16" y="24" width="32" height="10" rx="1.5" opacity="0.75" />
+                        <rect x="16" y="34" width="32" height="10" rx="1.5" opacity="0.55" />
+                        <rect x="16" y="44" width="32" height="10" rx="1.5" opacity="0.35" />
+                        <path d="M28 10 C28 6 36 6 36 10 L36 16 L28 16 Z" opacity="0.6" />
+                        <rect x="30" y="6" width="4" height="4" rx="2" opacity="0.8" />
+                    </svg>
                     <div>
-                        <h1 className="font-heading text-xl font-black tracking-tight text-white">
-                            DABBATHON <span className="text-[#FF4444]">SCOREBOARD</span>
+                        <h1 className="text-lg font-black tracking-tight text-white/90">
+                            Dabbathon <span className="text-[#FF4444]">v2.0</span>
                         </h1>
-                        <p className="text-white/25 text-[9px] font-semibold uppercase tracking-[0.25em]">
-                            Round {activeRound} · {Object.keys(teams).length} Teams · Live
+                        <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/20">
+                            Round {activeRound} · {board.length} Teams
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${cd <= 3 ? 'bg-[#FF4444]' : 'bg-emerald-400'} animate-pulse`} />
-                        <span className="text-[10px] font-mono text-white/30">{cd}s</span>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${cd <= 3 ? 'bg-[#FF4444]' : 'bg-emerald-500'} animate-pulse`} />
+                        <span className="text-[10px] font-mono text-white/20">{cd}s</span>
                     </div>
-                    <button onClick={() => router.push('/')} className="text-white/15 hover:text-white/40 text-[10px] transition">×</button>
+                    <button onClick={() => router.push('/')} className="text-white/10 hover:text-white/30 text-sm transition">✕</button>
                 </div>
             </div>
 
-            {/* ── Podium Section ── */}
-            {top3.length >= 3 && (
-                <div className="flex-shrink-0 px-8 pt-6 pb-2">
-                    <div className="flex items-end justify-center gap-3 h-[38vh]">
-                        {podiumOrder.map((team, i) => {
-                            const style = podiumStyles[i];
-                            const pct = Math.round((team.total / maxPossible) * 100);
-                            return (
-                                <div key={team.id} className="flex flex-col items-center" style={{ width: '28%', height: '100%', justifyContent: 'flex-end' }}>
-                                    {/* Team name + score floating above podium */}
-                                    <div className="text-center mb-2 animate-[fadeUp_0.6s_ease-out]">
-                                        <div className="text-3xl mb-1">{style.emoji}</div>
-                                        <div className="text-white font-bold text-base truncate max-w-[200px]">{team.name}</div>
-                                        <div className="font-mono font-black text-2xl mt-0.5" style={{ color: style.accent }}>{team.total}</div>
-                                        <div className="text-white/20 text-[10px] font-mono">/ {maxPossible} ({pct}%)</div>
+            {/* Team Grid */}
+            <div className="flex-1 overflow-auto px-8 py-5 min-h-0">
+                {board.length === 0 ? (
+                    <div className="h-full flex items-center justify-center">
+                        <p className="text-white/10 text-lg">Waiting for teams...</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {board.map((team) => (
+                            <div
+                                key={team.id}
+                                className="rounded-xl flex items-center gap-1 px-3 py-2 transition-all duration-500"
+                                style={{
+                                    background: 'rgba(255,255,255,0.025)',
+                                    border: '1px solid rgba(255,255,255,0.04)',
+                                }}
+                            >
+                                {/* Radar Chart */}
+                                <div className="w-40 h-36 flex-shrink-0 -ml-2">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <RadarChart data={team.radarData} outerRadius="70%">
+                                            <PolarGrid stroke="rgba(255,255,255,0.06)" />
+                                            <PolarAngleAxis dataKey="metric" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+                                            <PolarRadiusAxis domain={[0, globalMax]} tick={false} axisLine={false} />
+                                            <Radar dataKey="score" stroke="#FF4444" fill="#FF4444" fillOpacity={0.2} strokeWidth={2} />
+                                        </RadarChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-base font-bold text-white/80 truncate leading-snug">
+                                        {team.name}
                                     </div>
-                                    {/* Podium block */}
-                                    <div
-                                        className="w-full rounded-t-xl flex items-end justify-center pb-3 relative overflow-hidden"
-                                        style={{
-                                            height: style.height,
-                                            background: style.bg,
-                                            border: `1px solid ${style.border}33`,
-                                            borderBottom: 'none',
-                                            boxShadow: `0 -20px 60px -10px ${style.glow}, inset 0 1px 0 ${style.border}22`,
-                                        }}
-                                    >
-                                        {/* Shimmer effect for 1st place */}
-                                        {i === 1 && (
-                                            <div className="absolute inset-0 overflow-hidden">
-                                                <div
-                                                    className="absolute w-[200%] h-full opacity-[0.03]"
-                                                    style={{
-                                                        background: 'linear-gradient(90deg, transparent 0%, #FFD700 50%, transparent 100%)',
-                                                        animation: 'shimmer 3s ease-in-out infinite',
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
-                                        <span className="font-heading font-black text-4xl tracking-wider relative z-10" style={{ color: `${style.accent}33` }}>
-                                            {style.label}
+                                    <div className="mt-2 flex items-baseline gap-1.5">
+                                        <span className="text-3xl font-bold tabular-nums text-white/90 leading-none">
+                                            {team.total}
+                                        </span>
+                                        <span className="text-sm text-white/20 font-normal">
+                                            /{maxPossible}
                                         </span>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Remaining Teams (scrollable ticker) ── */}
-            <div className="flex-1 overflow-hidden px-8 pb-2 min-h-0">
-                {rest.length > 0 && (
-                    <div className="h-full overflow-auto scrollbar-hide">
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 py-2">
-                            {rest.map((team, idx) => {
-                                const rank = idx + 4;
-                                const pct = Math.round((team.total / maxPossible) * 100);
-                                return (
-                                    <div key={team.id} className="flex items-center gap-3 py-2 group" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                        {/* Rank */}
-                                        <span className="w-6 text-right font-mono text-sm font-bold text-white/15">{rank}</span>
-                                        {/* Name */}
-                                        <span className="flex-1 text-sm font-semibold text-white/60 truncate">{team.name}</span>
-                                        {/* Mini bar */}
-                                        <div className="w-24 h-1.5 bg-white/[0.06] rounded-full overflow-hidden flex-shrink-0">
-                                            <div
-                                                className="h-full rounded-full bg-[#FF4444]/60 transition-all duration-700"
-                                                style={{ width: `${Math.max(pct, 3)}%` }}
-                                            />
-                                        </div>
-                                        {/* Score */}
-                                        <span className="w-12 text-right font-mono text-sm font-bold text-white/40">{team.total}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-                {board.length === 0 && (
-                    <div className="h-full flex items-center justify-center">
-                        <div className="text-center">
-                            <div className="text-4xl mb-3 opacity-20">🏁</div>
-                            <p className="text-white/15 text-sm font-medium">Waiting for scores...</p>
-                        </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
 
-            {/* ── Footer ── */}
-            <div className="flex-shrink-0 px-8 py-1.5 flex items-center justify-between text-[9px] text-white/10 uppercase tracking-wider" style={{ borderTop: '1px solid rgba(255,68,68,0.08)' }}>
-                <span>BBA PESU · Dabbathon v2.0</span>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-1 h-1 rounded-full bg-[#FF4444] animate-pulse" />
-                    <span>Live Scoring</span>
-                </div>
+            {/* Footer */}
+            <div className="flex-shrink-0 px-10 py-2 flex items-center justify-center gap-2 text-[9px] text-white/8 uppercase tracking-widest" style={{ borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                <div className="w-1 h-1 rounded-full bg-[#FF4444] animate-pulse" />
+                <span>BBA PESU · Live</span>
             </div>
-
-            <style jsx>{`
-                @keyframes fadeUp {
-                    from { opacity: 0; transform: translateY(12px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes shimmer {
-                    0%, 100% { transform: translateX(-100%); }
-                    50% { transform: translateX(0%); }
-                }
-                .scrollbar-hide::-webkit-scrollbar { display: none; }
-                .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-            `}</style>
         </div>
     );
 }
