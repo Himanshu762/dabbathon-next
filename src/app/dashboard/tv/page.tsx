@@ -82,7 +82,7 @@ export default function TVDashboard() {
                         <p className="text-white/10 text-lg">Waiting for teams...</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                         {board.map((team) => (
                             <div
                                 key={team.id}
@@ -106,11 +106,11 @@ export default function TVDashboard() {
 
                                 {/* Name + Score — vertically centered */}
                                 <div className="flex-1 flex flex-col justify-center pr-5">
-                                    <div className="text-3xl font-bold text-white/80 truncate">
+                                    <div className="text-2xl font-bold text-white/80 truncate">
                                         {team.name}
                                     </div>
                                     <div className="mt-2 flex items-baseline gap-1.5">
-                                        <span className="text-6xl font-bold tabular-nums text-white/90 leading-none">
+                                        <span className="text-5xl font-bold tabular-nums text-white/90 leading-none">
                                             {team.total}
                                         </span>
                                         <span className="text-sm text-white/20">/{maxPossible}</span>
